@@ -14,6 +14,7 @@ namespace SDRSharp.SDRplay
         private SettingsPanel _configGui;
         private ReceiverPanel _receiverPanel;
         private ClientPanel _clientPanel;
+        private DiversityPanel _diversityPanel;
 
         public UserControl Gui
         {
@@ -48,6 +49,12 @@ namespace SDRSharp.SDRplay
             _source.DabNotch = Utils.GetBooleanSetting("plugin.sdrplay.dabNotch", false);
             _source.AmNotch = Utils.GetBooleanSetting("plugin.sdrplay.amNotch", false);
             _source.Ppm = Utils.GetDoubleSetting("plugin.sdrplay.ppm", 0);
+            _source.Mode = Utils.GetIntSetting("plugin.sdrplay.mode", RspDuoModes.Default);
+            _source.Output = Utils.GetIntSetting("plugin.sdrplay.output", SDRplayApi.TunerA);
+            _source.LnaStateB = Utils.GetIntSetting("plugin.sdrplay.lnaStateB", 0);
+            _source.IFGainReductionB = Utils.GetIntSetting("plugin.sdrplay.ifGainReductionB", 50);
+            _source.AutoAfterRetune = Utils.GetBooleanSetting("plugin.sdrplay.autoAfterRetune");
+            _source.Combiner.SetWeight(Utils.GetDoubleSetting("plugin.sdrplay.diversityPhase", 0), Utils.GetDoubleSetting("plugin.sdrplay.diversityGain", 0));
             _bridge = new SpyServerBridge(_source);
             _bridge.Port = Utils.GetIntSetting("plugin.sdrplay.port", 5555);
             _bridge.Enabled = Utils.GetBooleanSetting("plugin.sdrplay.enabled");
@@ -56,6 +63,8 @@ namespace SDRSharp.SDRplay
             _control.RegisterFrontControl(_receiverPanel, PluginPosition.Bottom);
             _clientPanel = new ClientPanel(_bridge, _source);
             _control.RegisterFrontControl(_clientPanel, PluginPosition.Bottom);
+            _diversityPanel = new DiversityPanel(_bridge, _source, _control);
+            _control.RegisterFrontControl(_diversityPanel, PluginPosition.Right);
         }
 
         public void Close()
@@ -73,9 +82,17 @@ namespace SDRSharp.SDRplay
             Utils.SaveSetting("plugin.sdrplay.dabNotch", _source.DabNotch);
             Utils.SaveSetting("plugin.sdrplay.amNotch", _source.AmNotch);
             Utils.SaveSetting("plugin.sdrplay.ppm", _source.Ppm);
+            Utils.SaveSetting("plugin.sdrplay.mode", _source.Mode);
+            Utils.SaveSetting("plugin.sdrplay.output", _source.Output);
+            Utils.SaveSetting("plugin.sdrplay.lnaStateB", _source.LnaStateB);
+            Utils.SaveSetting("plugin.sdrplay.ifGainReductionB", _source.IFGainReductionB);
+            Utils.SaveSetting("plugin.sdrplay.autoAfterRetune", _source.AutoAfterRetune);
+            Utils.SaveSetting("plugin.sdrplay.diversityPhase", _source.Combiner.Phase);
+            Utils.SaveSetting("plugin.sdrplay.diversityGain", _source.Combiner.GainDB);
             _bridge.Enabled = false;
             _receiverPanel.StopRefresh();
             _clientPanel.StopRefresh();
+            _diversityPanel.StopRefresh();
             if (_configGui != null)
             {
                 _configGui.StopRefresh();
@@ -88,7 +105,7 @@ namespace SDRSharp.SDRplay
         {
             if (_configGui == null)
             {
-                _configGui = new SettingsPanel(_bridge, _source, _control, _receiverPanel, _clientPanel);
+                _configGui = new SettingsPanel(_bridge, _source, _control, _receiverPanel, _clientPanel, _diversityPanel);
             }
         }
     }

@@ -15,8 +15,10 @@ namespace SDRSharp.SDRplay
 
         public const int TunerA = 1;
         public const int TunerB = 2;
+        public const int TunerBoth = 3;
 
         public const int RspDuoModeSingleTuner = 1;
+        public const int RspDuoModeDualTuner = 2;
         public const int RspDuoModeMaster = 4;
 
         public const int Bw1536 = 1536; // sdrplay_api_BW_1_536

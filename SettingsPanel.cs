@@ -16,19 +16,23 @@ namespace SDRSharp.SDRplay
         private ISharpControl _control;
         private ReceiverPanel _receiverPanel;
         private ClientPanel _clientPanel;
+        private DiversityPanel _diversityPanel;
         private Bitmap _receiverIcon;
         private Bitmap _receiverDarkIcon;
         private Bitmap _clientIcon;
         private Bitmap _clientDarkIcon;
+        private Bitmap _diversityIcon;
+        private Bitmap _diversityDarkIcon;
         private int _bridgeCalls; // bridge start / stop calls still running on a worker thread
 
-        public SettingsPanel(SpyServerBridge bridge, SDRplaySource source, ISharpControl control, ReceiverPanel receiverPanel, ClientPanel clientPanel)
+        public SettingsPanel(SpyServerBridge bridge, SDRplaySource source, ISharpControl control, ReceiverPanel receiverPanel, ClientPanel clientPanel, DiversityPanel diversityPanel)
         {
             _bridge = bridge;
             _source = source;
             _control = control;
             _receiverPanel = receiverPanel;
             _clientPanel = clientPanel;
+            _diversityPanel = diversityPanel;
 
             InitializeComponent();
 
@@ -39,6 +43,8 @@ namespace SDRSharp.SDRplay
             _receiverDarkIcon = LoadIcon("receiver_dark.png");
             _clientIcon = LoadIcon("client.png");
             _clientDarkIcon = LoadIcon("client_dark.png");
+            _diversityIcon = LoadIcon("diversity.png");
+            _diversityDarkIcon = LoadIcon("diversity_dark.png");
 
             enableCheckBox.Checked = _bridge.Enabled;
             portNumericUpDown.Value = Math.Min(Math.Max(_bridge.Port, (int)portNumericUpDown.Minimum), (int)portNumericUpDown.Maximum);
@@ -56,11 +62,18 @@ namespace SDRSharp.SDRplay
             dabNotchCheckBox.Checked = _source.DabNotch;
             amNotchCheckBox.Checked = _source.AmNotch;
             ppmNumericUpDown.Value = (decimal)Math.Round(_source.Ppm, 2);
+            modeComboBox.Items.AddRange(RspDuoModes.Names);
+            modeComboBox.SelectedIndex = _source.Mode;
+            UpdateLnaRangeB();
+            lnaBTrackBar.Value = Math.Min(Math.Max(_source.LnaStateB, lnaBTrackBar.Minimum), lnaBTrackBar.Maximum);
+            ifGainBTrackBar.Value = Math.Min(Math.Max(_source.IFGainReductionB, ifGainBTrackBar.Minimum), ifGainBTrackBar.Maximum);
             _receiverPanel.VisibleChanged += receiverPanel_VisibleChanged;
             _clientPanel.VisibleChanged += clientPanel_VisibleChanged;
+            _diversityPanel.VisibleChanged += diversityPanel_VisibleChanged;
             _control.PropertyChanged += control_PropertyChanged;
             receiverPanel_VisibleChanged(null, null);
             clientPanel_VisibleChanged(null, null);
+            diversityPanel_VisibleChanged(null, null);
             ApplyTheme();
 
             enableCheckBox_ValueChanged(null, null);
@@ -69,7 +82,67 @@ namespace SDRSharp.SDRplay
             agcComboBox_SelectedIndexChanged(null, null);
             setPointNumericUpDown_ValueChanged(null, null);
             ifGainTrackBar_Scroll(null, null);
+            lnaBTrackBar_Scroll(null, null);
+            ifGainBTrackBar_Scroll(null, null);
+            UpdateModeControls();
             refreshTimer_Tick(null, null);
+        }
+
+        private void modeComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            _source.Mode = modeComboBox.SelectedIndex;
+            UpdateModeControls();
+            refreshTimer_Tick(null, null);
+        }
+
+        private void lnaBTrackBar_Scroll(object sender, EventArgs e)
+        {
+            if (_source.LnaStateB != lnaBTrackBar.Value)
+            {
+                _source.LnaStateB = lnaBTrackBar.Value;
+            }
+            lnaBValueLabel.Text = LnaTextB();
+        }
+
+        private void ifGainBTrackBar_Scroll(object sender, EventArgs e)
+        {
+            if (_source.IFGainReductionB != ifGainBTrackBar.Value)
+            {
+                _source.IFGainReductionB = ifGainBTrackBar.Value;
+            }
+            ifGainBValueLabel.Text = _source.IFGainReductionB + " dB";
+        }
+
+        // Tuner 2 takes tuner 1's gain; the track bars send it to the source.
+        private void copyGainButton_Click(object sender, EventArgs e)
+        {
+            lnaBTrackBar.Value = Math.Min(Math.Max(lnaTrackBar.Value, lnaBTrackBar.Minimum), lnaBTrackBar.Maximum);
+            ifGainBTrackBar.Value = ifGainTrackBar.Value;
+        }
+
+        // Which controls apply in the mode chosen for the next session. Diversity: AGC off, 2 MS/s, both 50 ohm
+        // ports (no antenna choice), gain per tuner, Bias-T on tuner 2 and AM notch on tuner 1 always available.
+        private void UpdateModeControls()
+        {
+            var diversity = _source.Mode == RspDuoModes.Diversity;
+            lnaBCaptionLabel.Visible = diversity;
+            lnaBValueLabel.Visible = diversity;
+            lnaBTrackBar.Visible = diversity;
+            ifGainBCaptionLabel.Visible = diversity;
+            ifGainBValueLabel.Visible = diversity;
+            ifGainBTrackBar.Visible = diversity;
+            copyGainButton.Visible = diversity;
+            lnaCaptionLabel.Text = diversity ? "LNA State (Tuner 1)" : "LNA State";
+            ifGainCaptionLabel.Text = diversity ? "IF Gain Reduction (Tuner 1)" : "IF Gain Reduction";
+            var manual = _source.AgcMode == SDRplayApi.AgcDisable;
+            agcComboBox.Enabled = !diversity;
+            setPointNumericUpDown.Enabled = !diversity && !manual;
+            ifGainTrackBar.Enabled = diversity || manual;
+            rateComboBox.Enabled = !diversity;
+            antennaComboBox.Enabled = !diversity;
+            // The AM notch belongs to tuner 1, the Bias-T to the tuner 2 port.
+            amNotchCheckBox.Enabled = diversity || _source.Antenna != RspDuoAntenna.Tuner2_50Ohm;
+            biasTCheckBox.Enabled = diversity || _source.Antenna == RspDuoAntenna.Tuner2_50Ohm;
         }
 
         public void StopRefresh()
@@ -130,9 +203,7 @@ namespace SDRSharp.SDRplay
             {
                 _source.AgcMode = agcComboBox.SelectedIndex;
             }
-            var manual = _source.AgcMode == SDRplayApi.AgcDisable;
-            setPointNumericUpDown.Enabled = !manual;
-            ifGainTrackBar.Enabled = manual;
+            UpdateModeControls();
         }
 
         private void setPointNumericUpDown_ValueChanged(object sender, EventArgs e)
@@ -163,10 +234,7 @@ namespace SDRSharp.SDRplay
             {
                 _source.Antenna = antennaComboBox.SelectedIndex;
             }
-            // The AM notch belongs to tuner 1.
-            amNotchCheckBox.Enabled = _source.Antenna != RspDuoAntenna.Tuner2_50Ohm;
-            // The Bias-T belongs to the tuner 2 port.
-            biasTCheckBox.Enabled = _source.Antenna == RspDuoAntenna.Tuner2_50Ohm;
+            UpdateModeControls();
             refreshTimer_Tick(null, null);
         }
 
@@ -220,6 +288,11 @@ namespace SDRSharp.SDRplay
             _clientPanel.Visible = clientCheckBox.Checked;
         }
 
+        private void diversityCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            _diversityPanel.Visible = diversityCheckBox.Checked;
+        }
+
         // The host showed or hid the window: the toggle only reports it (VDK 05-ui.md 5.9).
         private void receiverPanel_VisibleChanged(object sender, EventArgs e)
         {
@@ -233,6 +306,13 @@ namespace SDRSharp.SDRplay
             clientCheckBox.CheckedChanged -= clientCheckBox_CheckedChanged;
             clientCheckBox.Checked = _clientPanel.Visible;
             clientCheckBox.CheckedChanged += clientCheckBox_CheckedChanged;
+        }
+
+        private void diversityPanel_VisibleChanged(object sender, EventArgs e)
+        {
+            diversityCheckBox.CheckedChanged -= diversityCheckBox_CheckedChanged;
+            diversityCheckBox.Checked = _diversityPanel.Visible;
+            diversityCheckBox.CheckedChanged += diversityCheckBox_CheckedChanged;
         }
 
         private void control_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -251,8 +331,10 @@ namespace SDRSharp.SDRplay
             var dark = _control.ThemeIsDark;
             receiverCheckBox.BackgroundImage = dark ? _receiverDarkIcon : _receiverIcon;
             clientCheckBox.BackgroundImage = dark ? _clientDarkIcon : _clientIcon;
+            diversityCheckBox.BackgroundImage = dark ? _diversityDarkIcon : _diversityIcon;
             receiverCheckBox.FlatAppearance.CheckedBackColor = dark ? ThemeService.DarkButtonColor : ThemeService.LightButtonColor;
             clientCheckBox.FlatAppearance.CheckedBackColor = dark ? ThemeService.DarkButtonColor : ThemeService.LightButtonColor;
+            diversityCheckBox.FlatAppearance.CheckedBackColor = dark ? ThemeService.DarkButtonColor : ThemeService.LightButtonColor;
         }
 
         private static Bitmap LoadIcon(string name)
@@ -276,11 +358,29 @@ namespace SDRSharp.SDRplay
             }
         }
 
+        private void UpdateLnaRangeB()
+        {
+            var maximum = _source.LnaStateCountB - 1;
+            if (lnaBTrackBar.Maximum != maximum)
+            {
+                lnaBTrackBar.Maximum = maximum;
+            }
+        }
+
         // "state (reduction dB)": the LNA gain reduction from the SDRplay table for the tuned band.
         private string LnaText()
         {
-            var reduction = _source.LnaReductionDB;
-            return _source.LnaState + " (" + (reduction > 0 ? "-" : "") + reduction + " dB)";
+            return LnaText(_source.LnaState, _source.LnaReductionDB);
+        }
+
+        private string LnaTextB()
+        {
+            return LnaText(_source.LnaStateB, _source.LnaReductionDBB);
+        }
+
+        private static string LnaText(int state, int reduction)
+        {
+            return state + " (" + (reduction > 0 ? "-" : "") + reduction + " dB)";
         }
 
         private void refreshTimer_Tick(object sender, EventArgs e)
@@ -300,7 +400,11 @@ namespace SDRSharp.SDRplay
                     {
                         stateLabel.Text = "Tick \"Use full IQ\" in the source";
                     }
-                    else if (_source.SampleRateIndex != _source.ActiveSampleRateIndex)
+                    else if (_source.Mode != _source.ActiveMode)
+                    {
+                        stateLabel.Text = "Reconnect the source for the new mode";
+                    }
+                    else if (_source.Mode == RspDuoModes.Single && _source.SampleRateIndex != _source.ActiveSampleRateIndex)
                     {
                         stateLabel.Text = "Reconnect the source for the new rate";
                     }
@@ -326,6 +430,12 @@ namespace SDRSharp.SDRplay
                 lnaTrackBar.Value = Math.Min(_source.LnaState, lnaTrackBar.Maximum);
             }
             lnaValueLabel.Text = LnaText();
+            UpdateLnaRangeB();
+            if (lnaBTrackBar.Value != _source.LnaStateB)
+            {
+                lnaBTrackBar.Value = Math.Min(_source.LnaStateB, lnaBTrackBar.Maximum);
+            }
+            lnaBValueLabel.Text = LnaTextB();
         }
     }
 }

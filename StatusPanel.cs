@@ -85,6 +85,26 @@ namespace SDRSharp.SDRplay
             return valueLabel;
         }
 
+        // A row of two controls: caption (column 0) and editor or value (column 1).
+        protected void AddControlRow(Control caption, Control editor)
+        {
+            var row = mainTableLayoutPanel.RowCount;
+            mainTableLayoutPanel.RowCount = row + 1;
+            mainTableLayoutPanel.RowStyles.Add(new RowStyle());
+            mainTableLayoutPanel.Controls.Add(caption, 0, row);
+            mainTableLayoutPanel.Controls.Add(editor, 1, row);
+        }
+
+        // A row of one control across both columns (a slider, a graph, a group of buttons).
+        protected void AddSpanRow(Control control)
+        {
+            var row = mainTableLayoutPanel.RowCount;
+            mainTableLayoutPanel.RowCount = row + 1;
+            mainTableLayoutPanel.RowStyles.Add(new RowStyle());
+            mainTableLayoutPanel.Controls.Add(control, 0, row);
+            mainTableLayoutPanel.SetColumnSpan(control, 2);
+        }
+
         private void refreshTimer_Tick(object sender, EventArgs e)
         {
             if (_bridge == null || !_bridge.Enabled)

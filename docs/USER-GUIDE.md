@@ -7,9 +7,10 @@
 - [3. Connecting SDR# to the receiver](#3-connecting-sdr-to-the-receiver)
 - [4. Plugin window reference](#4-plugin-window-reference)
 - [5. Status windows](#5-status-windows)
-- [6. Working tips](#6-working-tips)
-- [7. Troubleshooting](#7-troubleshooting)
-- [8. Limitations](#8-limitations)
+- [6. Diversity](#6-diversity)
+- [7. Working tips](#7-working-tips)
+- [8. Troubleshooting](#8-troubleshooting)
+- [9. Limitations](#9-limitations)
 
 ## 1. Overview
 
@@ -25,7 +26,7 @@ Division of work:
 
 | Controlled in the plugin window | Controlled in SDR# |
 |---|---|
-| Gain (LNA, AGC, IF), sample rate, antenna, Bias-T, notches, ppm | Centre frequency, bandwidth (decimation), demodulation |
+| Mode (Single Tuner / Diversity), gain (LNA, AGC, IF), sample rate, antenna, Bias-T, notches, ppm | Centre frequency, bandwidth (decimation), demodulation |
 
 The SDR# gain slider is hidden because gain belongs to the plugin window.
 
@@ -70,6 +71,7 @@ Notes:
 |---|---|
 | **Enabled** | Starts and stops the bridge. Stopping the receiver takes about 1.5 s. |
 | **TCP Port** | Port of the bridge on `127.0.0.1` (default 5555). Must match the port in the SDR# source address. |
+| **Mode** | **Single Tuner** (default) or **Diversity** (both tuners, see [section 6](#6-diversity)). Applies at the next connection of the SDR# source. |
 | **LNA State** | RF gain-reduction step. The dB value comes from the SDRplay table for the tuned band and the selected port, and is clamped when the band or port changes. |
 | **AGC** | **Off**, **Fast**, **Medium** or **Slow**: the AGC loop bandwidth of 100, 50 or 5 Hz (higher is faster). Default **Medium**. |
 | **AGC Setpoint (dBFS)** | Target signal level of the AGC. |
@@ -87,18 +89,21 @@ Enable it only when the connected device expects DC; otherwise leave it off.
 
 ## 5. Status windows
 
-Two icon buttons at the bottom of the plugin window show and hide two windows docked in SDR#.
+Three icon buttons at the bottom of the plugin window show and hide three windows docked in SDR#. The
+**Diversity** window (circle with a pointer) is described in [section 6](#6-diversity).
 
 **RSPduo** (antenna icon)
 
 | Row | Meaning |
 |---|---|
 | Device | Model, serial number and the selected antenna. |
+| Mode | Mode of the running connection: Single Tuner or Diversity. |
 | Frequency | Current centre frequency. |
 | Sample rate | Configured sample rate. |
 | Decimation | Decimation requested by SDR#. |
 | Gain reduction | Total gain reduction in dB (LNA plus IF). |
 | System gain | System gain reported by the receiver. |
+| Signal level | Level of each tuner in dBFS (Diversity only). |
 | ADC overload | Warning when the ADC is overloaded. Raise the LNA state or the IF gain reduction. |
 | Measured rate | Actual sample rate delivered by the receiver. |
 | Overruns | Count of sample blocks dropped because the client was too slow. |
@@ -117,9 +122,74 @@ Two icon buttons at the bottom of the plugin window show and hide two windows do
 | Messages sent | Number of messages sent to the client. |
 | Last command | Last command received from the client. |
 
-Both windows scroll when their content does not fit.
+In Diversity the gain, system gain, signal level and overload rows show both tuners as `T1 … | T2 …`.
+All three windows scroll when their content does not fit.
 
-## 6. Working tips
+## 6. Diversity
+
+Diversity receives with both RSPduo tuners at once. Connect an antenna to each tuner port; the plugin
+combines the two signals into one stream for SDR#. It is meant to reduce local interference (EMI, QRM) that
+the two antennas receive differently from the wanted signal.
+
+**Switching on**
+
+1. In the plugin window set **Mode** to **Diversity**.
+2. Stop and start the SDR# source (the mode applies at the next connection; until then the state label
+   shows `Reconnect the source for the new mode`).
+3. Show the **Diversity** window (third icon button) and set **Output** to **Combined**.
+
+In Diversity the plugin window changes:
+
+- The sample rate is fixed at 2 MS/s per tuner and only the 50 Ω ports are used; **Sample Rate** and
+  **Antenna** are disabled.
+- The AGC is off. **LNA State** and **IF Gain Reduction** exist for each tuner (Tuner 1, Tuner 2); the button
+  **Tuner 2 gain = Tuner 1 gain** copies the settings of Tuner 1 to Tuner 2.
+- Bias-T acts on Tuner 2 and the AM notch on Tuner 1, as in Single Tuner mode.
+- To go back, set **Mode** to **Single Tuner** and stop and start the source; the sample rate chosen in the
+  plugin window is restored.
+
+**Diversity window**
+
+The combined signal is `Tuner 1 + w · Tuner 2`, where the weight w has a phase φ and a gain g.
+
+| Control | Description |
+|---|---|
+| **Output** | What goes to SDR#: **Tuner 1**, **Tuner 2** or **Combined**. |
+| **Phase (Tuner 2)** | Phase φ of Tuner 2 in the sum. Drag the pointer of the wheel, or turn the mouse wheel over it (1°, with Shift 10°). 0° is at the top, clockwise. |
+| **Gain (Tuner 2)** | Level g of Tuner 2 relative to Tuner 1 in the sum, −30 to +30 dB in 0.1 dB steps. |
+| **Null** | Measures for 0.1 s and sets φ and g so that the output power is minimal: the strongest signal in the band is cancelled. |
+| **Max** | Measures for 0.1 s and sets φ and g so that the tuners add in phase (maximal ratio combining); with two equal antennas it gains up to about 3 dB of signal to noise ratio. |
+| **Auto after retune** | Repeats the last Null or Max after every frequency change. |
+| Status | `Not streaming`, `Mode is Single Tuner`, `Measuring...` or `Running`. |
+| Level Tuner 1 / Tuner 2 / Combined | Signal levels in dBFS. |
+| Coherence | Correlation of the two tuners, 0 to 1. |
+| Null Depth Limit | The deepest null the current coherence allows, 10·log10(1 − c²). |
+| Saturated Samples | Samples of the sum that clipped, per 100 ms. |
+| Unpaired Packets | Packets of one tuner that arrived without the packet of the other. |
+
+The wheel and the slider follow the result of Null and Max, so you can fine-tune from it by hand. The values
+are saved with the other settings.
+
+**Working with Null**
+
+1. Set the same gain on both tuners and check that **Saturated Samples** stays at 0.
+2. Tune where the interference is clearly the strongest signal, set **Output** to **Combined** and click
+   **Null**. The level of the interference in SDR# drops; fine-tune with the wheel and the slider.
+3. Retune: after every change of frequency the phase between the tuners is random again. Click **Null** again,
+   or tick **Auto after retune**.
+
+Null cancels whatever is strongest in the band. If the wanted station is stronger than the interference, Null
+cancels the station: use **Max** for it, or set the wheel by hand.
+
+**Limits**
+
+- Two antennas cancel one source at a time. The depth of the null cannot exceed **Null Depth Limit**.
+- The antennas must receive the interference differently from the wanted signal. Two identical antennas side
+  by side receive almost the same signals; a different polarisation (for example one antenna vertical, one
+  horizontal) or spacing gives something to work with.
+- Null and Max use the whole 2 MHz band; the choice of a reference band is planned (issue #36).
+
+## 7. Working tips
 
 - **Overload.** If the ADC overload indicator shows, increase the LNA state (more attenuation) before anything
   else; strong broadcast stations are the usual cause. The notch filters help near the MW/FM or DAB bands.
@@ -131,7 +201,7 @@ Both windows scroll when their content does not fit.
 - **Frequency accuracy.** Measure a known carrier and enter the offset in **Frequency Correction (ppm)**.
 - After reconnecting, SDR# returns the VFO to the centre frequency; retune after the reconnection.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause and remedy |
 |---|---|
@@ -141,15 +211,22 @@ Both windows scroll when their content does not fit.
 | SDR# shows "format … not supported" | A stream format other than **PCM 16** is selected. Choose **PCM 16**. |
 | Second connection is refused | Only one client at a time is supported. Disconnect the first client. |
 | Stream stutters, **Overruns** grows | The computer cannot process the data rate. Lower the sample rate or close other programs. |
-| VFO jumps to the centre frequency after reconnecting | Expected; see [Limitations](#8-limitations). |
+| VFO jumps to the centre frequency after reconnecting | Expected; see [Limitations](#9-limitations). |
+| Diversity window says `Mode is Single Tuner` | The source runs in Single Tuner mode. Choose **Mode** = **Diversity**, then stop and start the SDR# source. |
+| After changing **Mode** the plugin says `Reconnect the source for the new mode` | The mode applies at the next connection. Click stop, then play in SDR#. |
+| In Diversity **Unpaired Packets** grows or **Saturated Samples** is not 0 | The packets of the two tuners did not arrive together, or the sum clips. Lower the gain of the tuners or of Tuner 2 (Gain slider) and close other programs. |
+| The null is shallow, **Null Depth Limit** is low | The interference is received differently by the two antennas, so it cannot be cancelled fully. Change the position or polarisation of one antenna. |
 | Plugin is not listed | Check the path `Plugins\SDRSharp.SDRplay\SDRSharp.SDRplay.dll` and that SDR# is version 1922 or later (.NET 10). |
 
-## 8. Limitations
+## 9. Limitations
 
 - One client at a time.
 - **Use full IQ** must be ticked again after each reconnection.
 - After a reconnection SDR# resets the VFO to the centre frequency (SDR# sends the bridge only its centre
   frequency).
-- A new sample rate applies at the next connection of the source.
-- Single tuner mode only; no dual tuner or diversity reception.
+- A new sample rate or a new mode applies at the next connection of the source.
+- Diversity: 2 MS/s only, 50 Ω ports only (no Hi-Z), AGC off; Sample Rate and Antenna are fixed.
+- Diversity: the phase between the tuners is random after every retune; repeat Null / Max or use
+  **Auto after retune**.
+- Diversity: Null and Max use the whole 2 MHz band. Two antennas cancel one interference source at a time.
 - PCM 16 only; no FFT is sent by the bridge.

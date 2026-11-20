@@ -11,9 +11,10 @@ using System.Threading;
 
 namespace SDRSharp.SDRplay
 {
-    // RSPduo in Single Tuner mode (tuner A) through SDRplay API 3.15.
+    // RSPduo through SDRplay API 3.15: Single Tuner mode (tuner A or B), or Dual Tuner mode for Diversity
+    // (both tuners stream; the selected one goes to the ring).
     // Threads: the bridge receive thread calls Start / Stop and the setters (API calls under _apiLock);
-    // the API stream thread calls OnStreamA (interleave into _staging, Write to the ring, never waits);
+    // the API stream thread calls OnStreamA / OnStreamB (interleave into _staging, Write to the ring, never waits);
     // the bridge sender thread calls Read (Acquire / Release, overload acknowledge).
     public unsafe partial class SDRplaySource : IIQSource, IDisposable
     {
@@ -53,6 +54,22 @@ namespace SDRSharp.SDRplay
         private double _ppm;
         private IntPtr _deviceParams; // SDRplayDeviceParams*, owned by the API like _channel
 
+        // Diversity (Dual Tuner mode): _channel is tuner A, _channelB tuner B. AGC is off on both: the AGC of each
+        // tuner would change the A/B level ratio that the combination relies on (issue #36).
+        private volatile int _mode = RspDuoModes.Default; // requested in the window
+        private volatile int _activeMode = RspDuoModes.Default; // fixed for the client session
+        private volatile int _output = SDRplayApi.TunerA; // Diversity: the tuner whose stream goes to SDR#
+        private IntPtr _channelB;
+        private volatile int _lnaStateB;
+        private volatile int _ifGainReductionB = 50; // dB
+        private volatile int _reportedIFGainReductionB = -1;
+        private volatile int _reportedLnaGainReductionB = -1;
+        private double _reportedGainB;
+        private volatile bool _overloadB;
+        private readonly DiversityCombiner _combiner = new DiversityCombiner();
+        private volatile bool _autoAfterRetune;
+        private readonly object _writeLock = new object(); // Diversity: both stream callbacks may write the ring
+
         private volatile string _deviceName = "";
         private string _serial = "";
         private volatile string _failure = "";
@@ -66,9 +83,44 @@ namespace SDRSharp.SDRplay
             NativeLibrary.SetDllImportResolver(typeof(SDRplaySource).Assembly, ResolveLibrary);
         }
 
-        public uint MaximumSampleRate => (uint)RspDuoSampleRates.SampleRate[_activeRateIndex];
+        public uint MaximumSampleRate => (uint)ActiveSampleRate;
 
-        public uint MaximumBandwidth => (uint)RspDuoSampleRates.BwType[_activeRateIndex] * 1000;
+        public uint MaximumBandwidth => (uint)(Diversity ? RspDuoModes.DiversityBwType : RspDuoSampleRates.BwType[_activeRateIndex]) * 1000;
+
+        private int ActiveSampleRate => Diversity ? RspDuoModes.DiversitySampleRate : RspDuoSampleRates.SampleRate[_activeRateIndex];
+
+        // The mode of the running (or next) client session.
+        private bool Diversity => _activeMode == RspDuoModes.Diversity;
+
+        // RspDuoModes value for the next client session, like the sample rate.
+        public int Mode
+        {
+            get { return _mode; }
+            set { _mode = RspDuoModes.Clamp(value); }
+        }
+
+        public int ActiveMode => _activeMode;
+
+        // Diversity: what goes to SDR#: SDRplayApi.TunerA, TunerB, or TunerBoth for the combination; applies at once.
+        public int Output
+        {
+            get { return _output; }
+            set
+            {
+                _output = value == SDRplayApi.TunerB || value == SDRplayApi.TunerBoth ? value : SDRplayApi.TunerA;
+                UpdateDeviceName();
+            }
+        }
+
+        // Diversity: the combination of the two tuners and its measurements (the Diversity window).
+        public DiversityCombiner Combiner => _combiner;
+
+        // Diversity: repeat the last auto (Null / Max) after every frequency change.
+        public bool AutoAfterRetune
+        {
+            get { return _autoAfterRetune; }
+            set { _autoAfterRetune = value; }
+        }
 
         // The rate for the next client session (DEVICE_INFO is sent once per session).
         public int SampleRateIndex
@@ -82,6 +134,7 @@ namespace SDRSharp.SDRplay
         public void BeginSession()
         {
             _activeRateIndex = _sampleRateIndex;
+            _activeMode = _mode;
         }
 
         public uint DecimationStageCount => MaxDecimationStage;
@@ -125,13 +178,44 @@ namespace SDRSharp.SDRplay
                         _lnaState = maxState;
                         reason |= SDRplayApi.UpdateTunerGr;
                     }
-                    if (_streaming)
+                    var maxStateB = RspDuoGainTable.StateCount(value, false) - 1;
+                    var reasonB = SDRplayApi.UpdateTunerFrf;
+                    if (_lnaStateB > maxStateB)
+                    {
+                        _lnaStateB = maxStateB;
+                        reasonB |= SDRplayApi.UpdateTunerGr;
+                    }
+                    if (_streaming && Diversity)
+                    {
+                        var channelA = (SDRplayRxChannelParams*)_channel;
+                        var channelB = (SDRplayRxChannelParams*)_channelB;
+                        channelA->TunerParams.RfFreq.RfHz = value;
+                        channelB->TunerParams.RfFreq.RfHz = value;
+                        SetGain(channelA, SDRplayApi.TunerA);
+                        SetGain(channelB, SDRplayApi.TunerB);
+                        if (reason == SDRplayApi.UpdateTunerFrf && reasonB == SDRplayApi.UpdateTunerFrf)
+                        {
+                            // One call tunes both (measured, issue #36 stage 1b).
+                            Check("Update Frf", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerBoth, reason, SDRplayApi.UpdateExt1None));
+                        }
+                        else
+                        {
+                            Check("Update Frf A", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerA, reason, SDRplayApi.UpdateExt1None));
+                            Check("Update Frf B", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerB, reasonB, SDRplayApi.UpdateExt1None));
+                        }
+                        // The retune gives the tuners a new phase difference (issue #36, stage 1b).
+                        if (_autoAfterRetune)
+                        {
+                            _combiner.RepeatAuto();
+                        }
+                    }
+                    else if (_streaming)
                     {
                         var channel = (SDRplayRxChannelParams*)_channel;
                         channel->TunerParams.RfFreq.RfHz = value;
                         if ((reason & SDRplayApi.UpdateTunerGr) != 0)
                         {
-                            SetGain(channel);
+                            SetGain(channel, _device.Tuner);
                         }
                         Check("Update Frf", sdrplay_api_Update(_device.Dev, _device.Tuner, reason, SDRplayApi.UpdateExt1None));
                     }
@@ -193,6 +277,34 @@ namespace SDRSharp.SDRplay
 
         public int LnaReductionDB => RspDuoGainTable.ReductionDB(Frequency, IsHiZ(_antenna, Frequency), _lnaState);
 
+        // Diversity: the gain of tuner B (tuner 2, 50 ohm port). The properties above are tuner A's.
+        public int LnaStateB
+        {
+            get { return _lnaStateB; }
+            set
+            {
+                lock (_apiLock)
+                {
+                    _lnaStateB = Math.Min(Math.Max(value, 0), LnaStateCountB - 1);
+                    UpdateGainB();
+                }
+            }
+        }
+
+        public int IFGainReductionB
+        {
+            get { return _ifGainReductionB; }
+            set
+            {
+                _ifGainReductionB = Math.Min(Math.Max(value, RspDuoGainTable.MinIFGainReduction), RspDuoGainTable.MaxIFGainReduction);
+                UpdateGainB();
+            }
+        }
+
+        public int LnaStateCountB => RspDuoGainTable.StateCount(Frequency, false);
+
+        public int LnaReductionDBB => RspDuoGainTable.ReductionDB(Frequency, false, _lnaStateB);
+
         // RspDuoAntenna value. Changing the tuner while streaming uses SwapRspDuoActiveTuner (API spec 3.18).
         public int Antenna
         {
@@ -211,7 +323,8 @@ namespace SDRSharp.SDRplay
                         _lnaState = LnaStateCount - 1;
                         reason |= SDRplayApi.UpdateTunerGr;
                     }
-                    if (!_streaming || previous == antenna)
+                    // Diversity uses both 50 ohm ports: the antenna is kept for Single Tuner mode.
+                    if (!_streaming || previous == antenna || Diversity)
                     {
                         return;
                     }
@@ -230,7 +343,7 @@ namespace SDRSharp.SDRplay
                     // Same tuner 1, other port.
                     var channel = (SDRplayRxChannelParams*)_channel;
                     channel->RspDuoTunerParams.Tuner1AmPortSel = RspDuoAntenna.AmPort(antenna);
-                    SetGain(channel);
+                    SetGain(channel, _device.Tuner);
                     Check("Update AmPortSelect", sdrplay_api_Update(_device.Dev, _device.Tuner, reason | SDRplayApi.UpdateRspDuoAmPortSelect, SDRplayApi.UpdateExt1None));
                 }
             }
@@ -274,7 +387,7 @@ namespace SDRSharp.SDRplay
             set
             {
                 _amNotch = value;
-                if (_device.Tuner == SDRplayApi.TunerA || !_streaming)
+                if (_device.Tuner == SDRplayApi.TunerA || !_streaming || Diversity)
                 {
                     UpdateTunerOption("Update Tuner1AmNotchControl", SDRplayApi.UpdateRspDuoTuner1AmNotchControl);
                 }
@@ -298,7 +411,8 @@ namespace SDRSharp.SDRplay
                     if (_streaming)
                     {
                         ((SDRplayDeviceParams*)_deviceParams)->DevParams->Ppm = Ppm;
-                        Check("Update Ppm", sdrplay_api_Update(_device.Dev, _device.Tuner, SDRplayApi.UpdateDevPpm, SDRplayApi.UpdateExt1None));
+                        // A device parameter: in Dual Tuner mode it is sent through tuner A.
+                        Check("Update Ppm", sdrplay_api_Update(_device.Dev, Diversity ? SDRplayApi.TunerA : _device.Tuner, SDRplayApi.UpdateDevPpm, SDRplayApi.UpdateExt1None));
                     }
                 }
             }
@@ -314,6 +428,20 @@ namespace SDRSharp.SDRplay
 
         public double ReportedGain => Interlocked.CompareExchange(ref _reportedGain, 0, 0);
 
+        // Diversity: tuner B's reports; the ones above are tuner A's.
+        public bool OverloadB => _overloadB;
+
+        public int ReportedIFGainReductionB => _reportedIFGainReductionB;
+
+        public int ReportedLnaGainReductionB => _reportedLnaGainReductionB;
+
+        public double ReportedGainB => Interlocked.CompareExchange(ref _reportedGainB, 0, 0);
+
+        // Diversity: signal level of each tuner's stream, dBFS (last measurement window); NaN without a stream.
+        public double LevelA => _streaming ? _combiner.LevelA : double.NaN;
+
+        public double LevelB => _streaming ? _combiner.LevelB : double.NaN;
+
         public bool IsStreaming => _streaming;
 
         public int DecimationStage
@@ -327,7 +455,12 @@ namespace SDRSharp.SDRplay
                     if (_streaming)
                     {
                         SetDecimation((SDRplayRxChannelParams*)_channel);
-                        Check("Update Decimation", sdrplay_api_Update(_device.Dev, _device.Tuner, SDRplayApi.UpdateCtrlDecimation, SDRplayApi.UpdateExt1None));
+                        if (Diversity)
+                        {
+                            SetDecimation((SDRplayRxChannelParams*)_channelB);
+                            _combiner.SampleRate = ActiveSampleRate >> _decimationStage;
+                        }
+                        UpdateTuners("Update Decimation", SDRplayApi.UpdateCtrlDecimation);
                     }
                 }
             }
@@ -390,7 +523,7 @@ namespace SDRSharp.SDRplay
                 {
                     if (_streaming)
                     {
-                        Check("Update OverloadMsgAck", sdrplay_api_Update(_device.Dev, _device.Tuner, SDRplayApi.UpdateCtrlOverloadMsgAck, SDRplayApi.UpdateExt1None));
+                        UpdateTuners("Update OverloadMsgAck", SDRplayApi.UpdateCtrlOverloadMsgAck);
                     }
                 }
             }
@@ -430,6 +563,7 @@ namespace SDRSharp.SDRplay
                 _staging.Dispose();
                 _staging = null;
             }
+            _combiner.Dispose();
             if (_self.IsAllocated)
             {
                 _self.Free();
@@ -487,8 +621,24 @@ namespace SDRSharp.SDRplay
             }
 
             _device = devices[index];
-            _device.RspDuoMode = SDRplayApi.RspDuoModeSingleTuner;
-            _device.Tuner = RspDuoAntenna.Tuner(_antenna);
+            var diversity = Diversity;
+            if (diversity && (_device.RspDuoMode & SDRplayApi.RspDuoModeDualTuner) == 0)
+            {
+                sdrplay_api_UnlockDeviceApi();
+                _failure = "The RSPduo does not offer Dual Tuner mode now (modes 0x" + _device.RspDuoMode.ToString("x") + ")";
+                return;
+            }
+            if (diversity)
+            {
+                _device.RspDuoMode = SDRplayApi.RspDuoModeDualTuner;
+                _device.Tuner = SDRplayApi.TunerBoth;
+                _device.RspDuoSampleFreq = RspDuoModes.DiversityAdcRate;
+            }
+            else
+            {
+                _device.RspDuoMode = SDRplayApi.RspDuoModeSingleTuner;
+                _device.Tuner = RspDuoAntenna.Tuner(_antenna);
+            }
             fixed (SDRplayDevice* device = &_device)
             {
                 result = sdrplay_api_SelectDevice(device);
@@ -505,23 +655,33 @@ namespace SDRSharp.SDRplay
             {
                 return;
             }
-            var channel = ChannelOf(deviceParams);
-            if (deviceParams == null || deviceParams->DevParams == null || channel == null)
+            var channel = diversity ? (deviceParams == null ? null : deviceParams->RxChannelA) : ChannelOf(deviceParams);
+            var channelB = diversity && deviceParams != null ? deviceParams->RxChannelB : null;
+            if (deviceParams == null || deviceParams->DevParams == null || channel == null || (diversity && channelB == null))
             {
                 _failure = "GetDeviceParams returned no parameters";
                 return;
             }
             _deviceParams = (IntPtr)deviceParams;
-            deviceParams->DevParams->FsFreq.FsHz = RspDuoSampleRates.SampleRate[_activeRateIndex];
             deviceParams->DevParams->Ppm = Ppm;
-            SetTunerOptions(channel);
-            channel->TunerParams.RfFreq.RfHz = Frequency;
-            channel->TunerParams.BwType = RspDuoSampleRates.BwType[_activeRateIndex];
-            channel->TunerParams.IfType = SDRplayApi.IFZero;
-            SetDecimation(channel);
-            SetGain(channel);
-            SetAgc(channel);
+            if (diversity)
+            {
+                // The ADC rate comes from rspDuoSampleFreq; each tuner is set up the same way, with its own gain.
+                SetupChannel(channel, SDRplayApi.TunerA, RspDuoModes.DiversityBwType, RspDuoModes.DiversityIfType);
+                SetupChannel(channelB, SDRplayApi.TunerB, RspDuoModes.DiversityBwType, RspDuoModes.DiversityIfType);
+            }
+            else
+            {
+                deviceParams->DevParams->FsFreq.FsHz = RspDuoSampleRates.SampleRate[_activeRateIndex];
+                SetupChannel(channel, _device.Tuner, RspDuoSampleRates.BwType[_activeRateIndex], SDRplayApi.IFZero);
+            }
             _channel = (IntPtr)channel;
+            _channelB = (IntPtr)channelB;
+            _overloadB = false;
+            _reportedIFGainReductionB = -1;
+            _reportedLnaGainReductionB = -1;
+            _combiner.SampleRate = ActiveSampleRate >> _decimationStage;
+            _combiner.Reset();
             _overload = false;
             _reportedIFGainReduction = -1;
             _reportedLnaGainReduction = -1;
@@ -536,7 +696,7 @@ namespace SDRSharp.SDRplay
             {
                 _ring.Dispose();
             }
-            var slots = (int)(RspDuoSampleRates.SampleRate[_activeRateIndex] * RingDuration / SlotSamples) + 1;
+            var slots = (int)(ActiveSampleRate * RingDuration / SlotSamples) + 1;
             _ring = new CircularBuffer(SlotSamples * 4, slots);
             _measureSamples = 0;
             _measureStart = Stopwatch.GetTimestamp();
@@ -582,6 +742,7 @@ namespace SDRSharp.SDRplay
                 _selected = false;
             }
             _channel = IntPtr.Zero;
+            _channelB = IntPtr.Zero;
             _deviceParams = IntPtr.Zero;
             Interlocked.Exchange(ref _measuredSampleRate, 0); // no stream: no rate
             if (_apiOpen)
@@ -597,8 +758,22 @@ namespace SDRSharp.SDRplay
             {
                 if (_streaming)
                 {
-                    SetGain((SDRplayRxChannelParams*)_channel);
-                    Check("Update Gr", sdrplay_api_Update(_device.Dev, _device.Tuner, SDRplayApi.UpdateTunerGr, SDRplayApi.UpdateExt1None));
+                    // Single Tuner: the active tuner; Diversity: tuner A.
+                    var tuner = Diversity ? SDRplayApi.TunerA : _device.Tuner;
+                    SetGain((SDRplayRxChannelParams*)_channel, tuner);
+                    Check("Update Gr", sdrplay_api_Update(_device.Dev, tuner, SDRplayApi.UpdateTunerGr, SDRplayApi.UpdateExt1None));
+                }
+            }
+        }
+
+        private void UpdateGainB()
+        {
+            lock (_apiLock)
+            {
+                if (_streaming && Diversity)
+                {
+                    SetGain((SDRplayRxChannelParams*)_channelB, SDRplayApi.TunerB);
+                    Check("Update Gr B", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerB, SDRplayApi.UpdateTunerGr, SDRplayApi.UpdateExt1None));
                 }
             }
         }
@@ -607,7 +782,8 @@ namespace SDRSharp.SDRplay
         {
             lock (_apiLock)
             {
-                if (_streaming)
+                // Diversity keeps the AGC off (SetAgc): nothing to send.
+                if (_streaming && !Diversity)
                 {
                     SetAgc((SDRplayRxChannelParams*)_channel);
                     Check("Update Agc", sdrplay_api_Update(_device.Dev, _device.Tuner, SDRplayApi.UpdateCtrlAgc, SDRplayApi.UpdateExt1None));
@@ -615,9 +791,26 @@ namespace SDRSharp.SDRplay
             }
         }
 
-        private static bool IsHiZ(int antenna, long frequency)
+        // Called under _apiLock while streaming: one Update per streaming tuner.
+        private void UpdateTuners(string call, uint reason)
         {
-            return antenna == RspDuoAntenna.Tuner1HiZ && frequency < RspDuoGainTable.HiZMaxFrequency;
+            if (Diversity)
+            {
+                Check(call + " A", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerA, reason, SDRplayApi.UpdateExt1None));
+                Check(call + " B", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerB, reason, SDRplayApi.UpdateExt1None));
+            }
+            else
+            {
+                Check(call, sdrplay_api_Update(_device.Dev, _device.Tuner, reason, SDRplayApi.UpdateExt1None));
+            }
+        }
+
+        // The Hi-Z port exists only in Single Tuner mode (Diversity uses the 50 ohm ports). While streaming
+        // the session's mode counts, otherwise the mode chosen for the next session.
+        private bool IsHiZ(int antenna, long frequency)
+        {
+            var diversity = _streaming ? Diversity : _mode == RspDuoModes.Diversity;
+            return !diversity && antenna == RspDuoAntenna.Tuner1HiZ && frequency < RspDuoGainTable.HiZMaxFrequency;
         }
 
         // The channel parameters of the selected tuner (single tuner mode: rxChannelB for tuner B).
@@ -632,15 +825,32 @@ namespace SDRSharp.SDRplay
 
         private void UpdateDeviceName()
         {
-            _deviceName = "RSPduo " + _serial + ", " + RspDuoAntenna.Names[_antenna];
+            if (_serial.Length == 0)
+            {
+                return;
+            }
+            _deviceName = "RSPduo " + _serial + ", " + (Diversity
+                ? "Diversity, output " + RspDuoModes.OutputNames[RspDuoModes.OutputIndex(_output)]
+                : RspDuoAntenna.Names[_antenna]);
         }
 
-        private void SetTunerOptions(SDRplayRxChannelParams* channel)
+        private void SetTunerOptions(SDRplayRxChannelParams* channel, int tuner)
         {
-            // The Bias-T is on the tuner 2 port: with tuner 1 selected it is sent off.
-            channel->RspDuoTunerParams.BiasTEnable = (byte)(_biasT && _antenna == RspDuoAntenna.Tuner2_50Ohm ? 1 : 0);
-            channel->RspDuoTunerParams.Tuner1AmPortSel = RspDuoAntenna.AmPort(_antenna);
-            channel->RspDuoTunerParams.Tuner1AmNotchEnable = (byte)(_amNotch ? 1 : 0);
+            if (Diversity)
+            {
+                // Both 50 ohm ports: the Bias-T belongs to tuner B, the AM notch to tuner A.
+                var b = tuner == SDRplayApi.TunerB;
+                channel->RspDuoTunerParams.BiasTEnable = (byte)(_biasT && b ? 1 : 0);
+                channel->RspDuoTunerParams.Tuner1AmPortSel = SDRplayApi.RspDuoAmPort2;
+                channel->RspDuoTunerParams.Tuner1AmNotchEnable = (byte)(_amNotch && !b ? 1 : 0);
+            }
+            else
+            {
+                // The Bias-T is on the tuner 2 port: with tuner 1 selected it is sent off.
+                channel->RspDuoTunerParams.BiasTEnable = (byte)(_biasT && _antenna == RspDuoAntenna.Tuner2_50Ohm ? 1 : 0);
+                channel->RspDuoTunerParams.Tuner1AmPortSel = RspDuoAntenna.AmPort(_antenna);
+                channel->RspDuoTunerParams.Tuner1AmNotchEnable = (byte)(_amNotch ? 1 : 0);
+            }
             channel->RspDuoTunerParams.RfNotchEnable = (byte)(_rfNotch ? 1 : 0);
             channel->RspDuoTunerParams.RfDabNotchEnable = (byte)(_dabNotch ? 1 : 0);
         }
@@ -649,12 +859,40 @@ namespace SDRSharp.SDRplay
         {
             lock (_apiLock)
             {
-                if (_streaming)
+                if (!_streaming)
                 {
-                    SetTunerOptions((SDRplayRxChannelParams*)_channel);
+                    return;
+                }
+                if (!Diversity)
+                {
+                    SetTunerOptions((SDRplayRxChannelParams*)_channel, _device.Tuner);
                     Check(call, sdrplay_api_Update(_device.Dev, _device.Tuner, reason, SDRplayApi.UpdateExt1None));
+                    return;
+                }
+                SetTunerOptions((SDRplayRxChannelParams*)_channel, SDRplayApi.TunerA);
+                SetTunerOptions((SDRplayRxChannelParams*)_channelB, SDRplayApi.TunerB);
+                // The Bias-T is tuner B's only, the AM notch tuner A's only; the other notches go to both.
+                if (reason != SDRplayApi.UpdateRspDuoBiasTControl)
+                {
+                    Check(call + " A", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerA, reason, SDRplayApi.UpdateExt1None));
+                }
+                if (reason != SDRplayApi.UpdateRspDuoTuner1AmNotchControl)
+                {
+                    Check(call + " B", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerB, reason, SDRplayApi.UpdateExt1None));
                 }
             }
+        }
+
+        // Called under _apiLock before Init: everything a channel needs to start.
+        private void SetupChannel(SDRplayRxChannelParams* channel, int tuner, int bwType, int ifType)
+        {
+            SetTunerOptions(channel, tuner);
+            channel->TunerParams.RfFreq.RfHz = Frequency;
+            channel->TunerParams.BwType = bwType;
+            channel->TunerParams.IfType = ifType;
+            SetDecimation(channel);
+            SetGain(channel, tuner);
+            SetAgc(channel);
         }
 
         // Called under _apiLock while streaming. The API keeps the settings on the swap, except B to A
@@ -681,8 +919,8 @@ namespace SDRSharp.SDRplay
             }
             _channel = (IntPtr)channel;
             UpdateDeviceName();
-            SetTunerOptions(channel);
-            SetGain(channel);
+            SetTunerOptions(channel, tuner);
+            SetGain(channel, tuner);
             SetAgc(channel);
             var reason = SDRplayApi.UpdateTunerGr | SDRplayApi.UpdateCtrlAgc | SDRplayApi.UpdateRspDuoBiasTControl
                 | SDRplayApi.UpdateRspDuoRfNotchControl | SDRplayApi.UpdateRspDuoRfDabNotchControl;
@@ -694,8 +932,16 @@ namespace SDRSharp.SDRplay
             return true;
         }
 
-        private void SetGain(SDRplayRxChannelParams* channel)
+        // tuner: the channel's tuner. Single Tuner mode has one set of gain settings; Diversity has one per tuner.
+        private void SetGain(SDRplayRxChannelParams* channel, int tuner)
         {
+            if (Diversity)
+            {
+                var b = tuner == SDRplayApi.TunerB;
+                channel->TunerParams.Gain.LNAstate = (byte)(b ? _lnaStateB : _lnaState);
+                channel->TunerParams.Gain.GRdB = b ? _ifGainReductionB : _ifGainReduction;
+                return;
+            }
             channel->TunerParams.Gain.LNAstate = (byte)_lnaState;
             // With the AGC on, the AGC owns the IF gain reduction: leave its current value.
             if (_agcMode == SDRplayApi.AgcDisable)
@@ -706,9 +952,9 @@ namespace SDRSharp.SDRplay
 
         private void SetAgc(SDRplayRxChannelParams* channel)
         {
-            channel->CtrlParams.Agc.Enable = _agcMode;
+            channel->CtrlParams.Agc.Enable = Diversity ? SDRplayApi.AgcDisable : _agcMode;
             // The API accepts a narrower setpoint range at the higher sample rates.
-            channel->CtrlParams.Agc.SetPointDBfs = Math.Max(_agcSetPoint, RspDuoSampleRates.MinAgcSetPoint(RspDuoSampleRates.SampleRate[_activeRateIndex]));
+            channel->CtrlParams.Agc.SetPointDBfs = Math.Max(_agcSetPoint, RspDuoSampleRates.MinAgcSetPoint(ActiveSampleRate));
         }
 
         private void SetDecimation(SDRplayRxChannelParams* channel)
@@ -738,26 +984,42 @@ namespace SDRSharp.SDRplay
         // API stream thread: interleave I/Q into the staging buffer and hand it to the ring without waiting.
         private void WriteSamples(short* xi, short* xq, int count)
         {
-            var ring = _ring;
-            if (ring == null || count <= 0)
+            if (_ring == null || count <= 0)
             {
                 return;
             }
-            if (_staging == null || _staging.Length < count)
-            {
-                if (_staging != null)
-                {
-                    _staging.Dispose();
-                }
-                _staging = UnsafeBuffer.Create(count, 2 * sizeof(short));
-            }
+            EnsureStaging(count);
             var stagingPtr = (short*)_staging;
             for (var i = 0; i < count; i++)
             {
                 stagingPtr[2 * i] = xi[i];
                 stagingPtr[2 * i + 1] = xq[i];
             }
-            if (!ring.Write((byte*)stagingPtr, 4 * count, false))
+            CommitStaging(count);
+        }
+
+        // API stream thread: the staging buffer holds at least count interleaved IQ samples (grow-only).
+        private void EnsureStaging(int count)
+        {
+            if (_staging == null || _staging.Length < count)
+            {
+                if (_staging != null)
+                {
+                    _staging.Dispose();
+                }
+                _staging = UnsafeBuffer.Create(Math.Max(count, 1), 2 * sizeof(short));
+            }
+        }
+
+        // API stream thread: hands the first count staged samples to the ring without waiting.
+        private void CommitStaging(int count)
+        {
+            var ring = _ring;
+            if (ring == null || count <= 0)
+            {
+                return;
+            }
+            if (!ring.Write((byte*)(short*)_staging, 4 * count, false))
             {
                 if (_overruns < int.MaxValue)
                 {
@@ -766,18 +1028,37 @@ namespace SDRSharp.SDRplay
             }
         }
 
-        private void OnDeviceEvent(int eventId, void* parameters)
+        // tuner: the tuner the event is about; in Single Tuner mode every report is the active tuner's.
+        private void OnDeviceEvent(int eventId, int tuner, void* parameters)
         {
+            var b = Diversity && tuner == SDRplayApi.TunerB;
             switch (eventId)
             {
                 case SDRplayApi.EventGainChange:
                     var gain = (SDRplayGainCbParam*)parameters;
-                    _reportedIFGainReduction = (int)gain->GRdB;
-                    _reportedLnaGainReduction = (int)gain->LnaGRdB;
-                    Interlocked.Exchange(ref _reportedGain, gain->CurrGain);
+                    if (b)
+                    {
+                        _reportedIFGainReductionB = (int)gain->GRdB;
+                        _reportedLnaGainReductionB = (int)gain->LnaGRdB;
+                        Interlocked.Exchange(ref _reportedGainB, gain->CurrGain);
+                    }
+                    else
+                    {
+                        _reportedIFGainReduction = (int)gain->GRdB;
+                        _reportedLnaGainReduction = (int)gain->LnaGRdB;
+                        Interlocked.Exchange(ref _reportedGain, gain->CurrGain);
+                    }
                     break;
                 case SDRplayApi.EventPowerOverloadChange:
-                    _overload = *(int*)parameters == SDRplayApi.OverloadDetected;
+                    var detected = *(int*)parameters == SDRplayApi.OverloadDetected;
+                    if (b)
+                    {
+                        _overloadB = detected;
+                    }
+                    else
+                    {
+                        _overload = detected;
+                    }
                     _overloadPending = true;
                     break;
                 case SDRplayApi.EventDeviceRemoved:
@@ -823,22 +1104,49 @@ namespace SDRSharp.SDRplay
         private static void OnStreamA(short* xi, short* xq, SDRplayStreamCbParams* parameters, uint numSamples, uint reset, void* context)
         {
             var source = (SDRplaySource)GCHandle.FromIntPtr((IntPtr)context).Target;
-            source.WriteSamples(xi, xq, (int)numSamples);
+            source.OnStream(SDRplayApi.TunerA, parameters->FirstSampleNum, xi, xq, (int)numSamples);
         }
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         private static void OnStreamB(short* xi, short* xq, SDRplayStreamCbParams* parameters, uint numSamples, uint reset, void* context)
         {
-            // Single tuner mode has one stream; if tuner B delivers it on this callback, it is the same output.
             var source = (SDRplaySource)GCHandle.FromIntPtr((IntPtr)context).Target;
-            source.WriteSamples(xi, xq, (int)numSamples);
+            source.OnStream(SDRplayApi.TunerB, parameters->FirstSampleNum, xi, xq, (int)numSamples);
         }
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         private static void OnEvent(int eventId, int tuner, void* parameters, void* context)
         {
             var source = (SDRplaySource)GCHandle.FromIntPtr((IntPtr)context).Target;
-            source.OnDeviceEvent(eventId, parameters);
+            source.OnDeviceEvent(eventId, tuner, parameters);
+        }
+
+        // API stream thread. Single Tuner mode has one stream: if tuner B delivers it on its callback, it is the same
+        // output. Diversity: the packets of both tuners are paired and measured by the combiner; the selected tuner,
+        // or the combination, goes to the ring.
+        private void OnStream(int tuner, uint number, short* xi, short* xq, int count)
+        {
+            if (!Diversity)
+            {
+                WriteSamples(xi, xq, count);
+                return;
+            }
+            // The API may call the two stream callbacks on different threads (not measured): one caller at a time.
+            lock (_writeLock)
+            {
+                var output = _output;
+                if (tuner == output)
+                {
+                    WriteSamples(xi, xq, count);
+                }
+                var combined = output == SDRplayApi.TunerBoth;
+                EnsureStaging(count);
+                var written = _combiner.Pair(tuner, number, xi, xq, count, (short*)_staging, combined);
+                if (written > 0)
+                {
+                    CommitStaging(written);
+                }
+            }
         }
 
         #region Native Methods

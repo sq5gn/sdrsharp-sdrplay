@@ -24,8 +24,12 @@ oficjalne SDRplay API i przekazuje próbki do wbudowanego źródła SDR# **AIRSP
 - Pełne sterowanie wzmocnieniem RSPduo z okna wtyczki: stan LNA (wartości dB z tabel SDRplay dla danego
   pasma i portu), AGC (Off / Fast / Medium / Slow), punkt pracy AGC i ręczne tłumienie IF.
 - Wybór anteny w trakcie odbioru: Tuner 1 50 Ω, Tuner 1 Hi-Z, Tuner 2 50 Ω.
+- **Diversity** (tryb Dual Tuner RSPduo): oba tunery odbierają jednocześnie, po 2 MS/s, a SDR# dostaje jeden
+  strumień: Tuner 1, Tuner 2 albo sumę Tuner 1 + w · Tuner 2. Wagę w ustawia się kołem fazowym i suwakiem
+  wzmocnienia albo automatycznie: **Null** wygasza najsilniejsze zakłócenie, **Max** dodaje tunery w fazie.
+  Wzmocnienie ustawia się osobno dla każdego tunera. Zobacz [instrukcję](docs/INSTRUKCJA.md#6-diversity).
 - Bias-T (Tuner 2), filtry notch MW/FM, DAB i AM, korekcja częstotliwości w ppm.
-- Dwa dokowane okna stanu: odbiornika oraz klienta SpyServer.
+- Trzy dokowane okna: stanu odbiornika, klienta SpyServer i Diversity.
 - Jasny i ciemny motyw zgodny z SDR#.
 - Wszystkie ustawienia zapisywane w `SDRSharp.config`.
 - Tylko lokalnie: most nasłuchuje na `127.0.0.1`.
@@ -65,7 +69,7 @@ Do korzystania z wtyczki nie potrzeba kodu źródłowego. Pobierz gotowe archiwu
 
 SDR# czyści **Use full IQ** przy każdym ponownym połączeniu; zaznacz je za każdym razem od nowa.
 
-Pełną instrukcję znajdziesz [tutaj](docs/INSTRUKCJA.md).
+Pełną instrukcję znajdziesz [tutaj](docs/INSTRUKCJA.md). Zmiany między wersjami opisuje [dziennik zmian](CHANGELOG.pl.md).
 
 ## Znane ograniczenia
 
@@ -73,8 +77,12 @@ Pełną instrukcję znajdziesz [tutaj](docs/INSTRUKCJA.md).
 - **Use full IQ** trzeba zaznaczyć ponownie po każdym połączeniu (SDR# je czyści).
 - Po ponownym połączeniu SDR# ustawia VFO z powrotem na częstotliwości środkowej: SDR# wysyła do mostu
   tylko częstotliwość środkową, przesunięcie VFO zostaje wewnątrz SDR#.
-- Nowa szybkość próbkowania działa od następnego połączenia źródła SDR#.
-- Tylko tryb jednego tunera (bez pracy dwutunerowej i diversity).
+- Nowa szybkość próbkowania albo nowy tryb (Single Tuner / Diversity) działa od następnego połączenia źródła
+  SDR# (Stop, potem Play).
+- Diversity pracuje przy 2 MS/s i tylko na portach 50 Ω; szybkość próbkowania i antena są w nim stałe, a AGC
+  wyłączone.
+- Faza między tunerami jest losowa po każdym przestrojeniu: powtórz Null / Max (albo zaznacz **Auto after retune**).
+- Dwie anteny wygaszają jedno źródło zakłóceń naraz; głębokość ogranicza jego koherencja między antenami.
 - Most wysyła wyłącznie 16-bitowe IQ (PCM 16) i nie wysyła FFT.
 
 ## Budowanie ze źródeł

@@ -55,12 +55,24 @@ namespace SDRSharp.SDRplay
             ppmNumericUpDown = new SDRSharp.PanView.DoubleBufferedNumericUpDown();
             receiverCheckBox = new System.Windows.Forms.CheckBox();
             clientCheckBox = new System.Windows.Forms.CheckBox();
+            diversityCheckBox = new System.Windows.Forms.CheckBox();
             toggleTableLayoutPanel = new SDRSharp.PanView.DoubleBufferedTableLayoutPanel();
             mainTableLayoutPanel = new SDRSharp.PanView.DoubleBufferedTableLayoutPanel();
+            modeLabel = new System.Windows.Forms.Label();
+            modeComboBox = new SDRSharp.PanView.DoubleBufferedComboBox();
+            lnaBCaptionLabel = new System.Windows.Forms.Label();
+            lnaBValueLabel = new System.Windows.Forms.Label();
+            lnaBTrackBar = new SDRSharp.PanView.DoubleBufferedTrackBar();
+            ifGainBCaptionLabel = new System.Windows.Forms.Label();
+            ifGainBValueLabel = new System.Windows.Forms.Label();
+            ifGainBTrackBar = new SDRSharp.PanView.DoubleBufferedTrackBar();
+            copyGainButton = new System.Windows.Forms.Button();
             refreshTimer = new System.Windows.Forms.Timer(components);
             toolTip = new System.Windows.Forms.ToolTip(components);
             ((System.ComponentModel.ISupportInitialize)portNumericUpDown).BeginInit();
             ((System.ComponentModel.ISupportInitialize)lnaTrackBar).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)lnaBTrackBar).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)ifGainBTrackBar).BeginInit();
             ((System.ComponentModel.ISupportInitialize)setPointNumericUpDown).BeginInit();
             ((System.ComponentModel.ISupportInitialize)ifGainTrackBar).BeginInit();
             ((System.ComponentModel.ISupportInitialize)ppmNumericUpDown).BeginInit();
@@ -112,6 +124,99 @@ namespace SDRSharp.SDRplay
             portNumericUpDown.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             portNumericUpDown.Value = new decimal(new int[] { 5555, 0, 0, 0 });
             portNumericUpDown.ValueChanged += portNumericUpDown_ValueChanged;
+            //
+            // modeLabel
+            //
+            modeLabel.Anchor = System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            modeLabel.AutoSize = true;
+            modeLabel.Margin = new System.Windows.Forms.Padding(3);
+            modeLabel.Name = "modeLabel";
+            modeLabel.Text = "Mode";
+            modeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
+            // modeComboBox
+            //
+            modeComboBox.Anchor = System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            modeComboBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            modeComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            modeComboBox.Font = new System.Drawing.Font("Segoe UI", 11F);
+            modeComboBox.Margin = new System.Windows.Forms.Padding(3);
+            modeComboBox.Name = "modeComboBox";
+            toolTip.SetToolTip(modeComboBox, "Single Tuner, or Diversity (both tuners, 2 MS/s, 50 ohm ports); applies at the next connection of the SDR# source");
+            modeComboBox.SelectedIndexChanged += modeComboBox_SelectedIndexChanged;
+            //
+            // lnaBCaptionLabel
+            //
+            lnaBCaptionLabel.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            lnaBCaptionLabel.AutoSize = true;
+            lnaBCaptionLabel.Margin = new System.Windows.Forms.Padding(3);
+            lnaBCaptionLabel.Name = "lnaBCaptionLabel";
+            lnaBCaptionLabel.Text = "LNA State (Tuner 2)";
+            //
+            // lnaBValueLabel
+            //
+            lnaBValueLabel.Anchor = System.Windows.Forms.AnchorStyles.Right;
+            lnaBValueLabel.AutoSize = true;
+            lnaBValueLabel.Margin = new System.Windows.Forms.Padding(3);
+            lnaBValueLabel.Name = "lnaBValueLabel";
+            lnaBValueLabel.Text = "0 (0 dB)";
+            lnaBValueLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            //
+            // lnaBTrackBar
+            //
+            lnaBTrackBar.Anchor = System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            mainTableLayoutPanel.SetColumnSpan(lnaBTrackBar, 2);
+            lnaBTrackBar.Margin = new System.Windows.Forms.Padding(3);
+            lnaBTrackBar.Maximum = 9;
+            lnaBTrackBar.Minimum = 0;
+            lnaBTrackBar.Name = "lnaBTrackBar";
+            lnaBTrackBar.Size = new System.Drawing.Size(227, 45);
+            lnaBTrackBar.TickFrequency = 1;
+            lnaBTrackBar.Value = 0;
+            toolTip.SetToolTip(lnaBTrackBar, "Tuner 2 LNA state: higher state = more RF gain reduction");
+            lnaBTrackBar.ValueChanged += lnaBTrackBar_Scroll;
+            //
+            // ifGainBCaptionLabel
+            //
+            ifGainBCaptionLabel.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            ifGainBCaptionLabel.AutoSize = true;
+            ifGainBCaptionLabel.Margin = new System.Windows.Forms.Padding(3);
+            ifGainBCaptionLabel.Name = "ifGainBCaptionLabel";
+            ifGainBCaptionLabel.Text = "IF Gain Reduction (Tuner 2)";
+            //
+            // ifGainBValueLabel
+            //
+            ifGainBValueLabel.Anchor = System.Windows.Forms.AnchorStyles.Right;
+            ifGainBValueLabel.AutoSize = true;
+            ifGainBValueLabel.Margin = new System.Windows.Forms.Padding(3);
+            ifGainBValueLabel.Name = "ifGainBValueLabel";
+            ifGainBValueLabel.Text = "50 dB";
+            ifGainBValueLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            //
+            // ifGainBTrackBar
+            //
+            ifGainBTrackBar.Anchor = System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            mainTableLayoutPanel.SetColumnSpan(ifGainBTrackBar, 2);
+            ifGainBTrackBar.Margin = new System.Windows.Forms.Padding(3);
+            ifGainBTrackBar.Maximum = 59;
+            ifGainBTrackBar.Minimum = 20;
+            ifGainBTrackBar.Name = "ifGainBTrackBar";
+            ifGainBTrackBar.Size = new System.Drawing.Size(227, 45);
+            ifGainBTrackBar.TickFrequency = 5;
+            ifGainBTrackBar.Value = 50;
+            toolTip.SetToolTip(ifGainBTrackBar, "Tuner 2 IF gain reduction");
+            ifGainBTrackBar.ValueChanged += ifGainBTrackBar_Scroll;
+            //
+            // copyGainButton
+            //
+            copyGainButton.Anchor = System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            mainTableLayoutPanel.SetColumnSpan(copyGainButton, 2);
+            copyGainButton.AutoSize = true;
+            copyGainButton.Margin = new System.Windows.Forms.Padding(3);
+            copyGainButton.Name = "copyGainButton";
+            copyGainButton.Text = "Tuner 2 gain = Tuner 1 gain";
+            toolTip.SetToolTip(copyGainButton, "Copy the LNA state and IF gain reduction of tuner 1 to tuner 2");
+            copyGainButton.Click += copyGainButton_Click;
             //
             // lnaCaptionLabel
             //
@@ -369,16 +474,30 @@ namespace SDRSharp.SDRplay
             toolTip.SetToolTip(clientCheckBox, "Show / hide the SpyServer client status");
             clientCheckBox.CheckedChanged += clientCheckBox_CheckedChanged;
             //
+            // diversityCheckBox
+            //
+            diversityCheckBox.Appearance = System.Windows.Forms.Appearance.Button;
+            diversityCheckBox.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Center;
+            diversityCheckBox.FlatAppearance.BorderSize = 0;
+            diversityCheckBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            diversityCheckBox.Margin = new System.Windows.Forms.Padding(3);
+            diversityCheckBox.Name = "diversityCheckBox";
+            diversityCheckBox.Size = new System.Drawing.Size(40, 40);
+            toolTip.SetToolTip(diversityCheckBox, "Show / hide the Diversity window (combination of the two tuners)");
+            diversityCheckBox.CheckedChanged += diversityCheckBox_CheckedChanged;
+            //
             // toggleTableLayoutPanel
             //
             toggleTableLayoutPanel.Anchor = System.Windows.Forms.AnchorStyles.Left;
             toggleTableLayoutPanel.AutoSize = true;
             toggleTableLayoutPanel.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
-            toggleTableLayoutPanel.ColumnCount = 2;
+            toggleTableLayoutPanel.ColumnCount = 3;
+            toggleTableLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             toggleTableLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             toggleTableLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             toggleTableLayoutPanel.Controls.Add(receiverCheckBox, 0, 0);
             toggleTableLayoutPanel.Controls.Add(clientCheckBox, 1, 0);
+            toggleTableLayoutPanel.Controls.Add(diversityCheckBox, 2, 0);
             toggleTableLayoutPanel.Margin = new System.Windows.Forms.Padding(0);
             toggleTableLayoutPanel.Name = "toggleTableLayoutPanel";
             toggleTableLayoutPanel.RowCount = 1;
@@ -396,32 +515,47 @@ namespace SDRSharp.SDRplay
             mainTableLayoutPanel.Controls.Add(stateLabel, 1, 0);
             mainTableLayoutPanel.Controls.Add(portLabel, 0, 1);
             mainTableLayoutPanel.Controls.Add(portNumericUpDown, 1, 1);
-            mainTableLayoutPanel.Controls.Add(lnaCaptionLabel, 0, 2);
-            mainTableLayoutPanel.Controls.Add(lnaValueLabel, 1, 2);
-            mainTableLayoutPanel.Controls.Add(lnaTrackBar, 0, 3);
-            mainTableLayoutPanel.Controls.Add(agcLabel, 0, 4);
-            mainTableLayoutPanel.Controls.Add(agcComboBox, 1, 4);
-            mainTableLayoutPanel.Controls.Add(setPointLabel, 0, 5);
-            mainTableLayoutPanel.Controls.Add(setPointNumericUpDown, 1, 5);
-            mainTableLayoutPanel.Controls.Add(ifGainCaptionLabel, 0, 6);
-            mainTableLayoutPanel.Controls.Add(ifGainValueLabel, 1, 6);
-            mainTableLayoutPanel.Controls.Add(ifGainTrackBar, 0, 7);
-            mainTableLayoutPanel.Controls.Add(rateLabel, 0, 8);
-            mainTableLayoutPanel.Controls.Add(rateComboBox, 1, 8);
-            mainTableLayoutPanel.Controls.Add(antennaLabel, 0, 9);
-            mainTableLayoutPanel.Controls.Add(antennaComboBox, 1, 9);
-            mainTableLayoutPanel.Controls.Add(biasTCheckBox, 0, 10);
-            mainTableLayoutPanel.Controls.Add(rfNotchCheckBox, 1, 10);
-            mainTableLayoutPanel.Controls.Add(amNotchCheckBox, 0, 11);
-            mainTableLayoutPanel.Controls.Add(dabNotchCheckBox, 1, 11);
-            mainTableLayoutPanel.Controls.Add(ppmLabel, 0, 12);
-            mainTableLayoutPanel.Controls.Add(ppmNumericUpDown, 1, 12);
-            mainTableLayoutPanel.Controls.Add(toggleTableLayoutPanel, 0, 13);
+            mainTableLayoutPanel.Controls.Add(modeLabel, 0, 2);
+            mainTableLayoutPanel.Controls.Add(modeComboBox, 1, 2);
+            mainTableLayoutPanel.Controls.Add(lnaCaptionLabel, 0, 3);
+            mainTableLayoutPanel.Controls.Add(lnaValueLabel, 1, 3);
+            mainTableLayoutPanel.Controls.Add(lnaTrackBar, 0, 4);
+            mainTableLayoutPanel.Controls.Add(agcLabel, 0, 5);
+            mainTableLayoutPanel.Controls.Add(agcComboBox, 1, 5);
+            mainTableLayoutPanel.Controls.Add(setPointLabel, 0, 6);
+            mainTableLayoutPanel.Controls.Add(setPointNumericUpDown, 1, 6);
+            mainTableLayoutPanel.Controls.Add(ifGainCaptionLabel, 0, 7);
+            mainTableLayoutPanel.Controls.Add(ifGainValueLabel, 1, 7);
+            mainTableLayoutPanel.Controls.Add(ifGainTrackBar, 0, 8);
+            mainTableLayoutPanel.Controls.Add(lnaBCaptionLabel, 0, 9);
+            mainTableLayoutPanel.Controls.Add(lnaBValueLabel, 1, 9);
+            mainTableLayoutPanel.Controls.Add(lnaBTrackBar, 0, 10);
+            mainTableLayoutPanel.Controls.Add(ifGainBCaptionLabel, 0, 11);
+            mainTableLayoutPanel.Controls.Add(ifGainBValueLabel, 1, 11);
+            mainTableLayoutPanel.Controls.Add(ifGainBTrackBar, 0, 12);
+            mainTableLayoutPanel.Controls.Add(copyGainButton, 0, 13);
+            mainTableLayoutPanel.Controls.Add(rateLabel, 0, 14);
+            mainTableLayoutPanel.Controls.Add(rateComboBox, 1, 14);
+            mainTableLayoutPanel.Controls.Add(antennaLabel, 0, 15);
+            mainTableLayoutPanel.Controls.Add(antennaComboBox, 1, 15);
+            mainTableLayoutPanel.Controls.Add(biasTCheckBox, 0, 16);
+            mainTableLayoutPanel.Controls.Add(rfNotchCheckBox, 1, 16);
+            mainTableLayoutPanel.Controls.Add(amNotchCheckBox, 0, 17);
+            mainTableLayoutPanel.Controls.Add(dabNotchCheckBox, 1, 17);
+            mainTableLayoutPanel.Controls.Add(ppmLabel, 0, 18);
+            mainTableLayoutPanel.Controls.Add(ppmNumericUpDown, 1, 18);
+            mainTableLayoutPanel.Controls.Add(toggleTableLayoutPanel, 0, 19);
             mainTableLayoutPanel.SetColumnSpan(toggleTableLayoutPanel, 2);
             mainTableLayoutPanel.Dock = System.Windows.Forms.DockStyle.Top;
             mainTableLayoutPanel.Location = new System.Drawing.Point(0, 0);
             mainTableLayoutPanel.Name = "mainTableLayoutPanel";
-            mainTableLayoutPanel.RowCount = 14;
+            mainTableLayoutPanel.RowCount = 20;
+                        mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
             mainTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -452,6 +586,8 @@ namespace SDRSharp.SDRplay
             Name = "SettingsPanel";
             ((System.ComponentModel.ISupportInitialize)portNumericUpDown).EndInit();
             ((System.ComponentModel.ISupportInitialize)lnaTrackBar).EndInit();
+            ((System.ComponentModel.ISupportInitialize)lnaBTrackBar).EndInit();
+            ((System.ComponentModel.ISupportInitialize)ifGainBTrackBar).EndInit();
             ((System.ComponentModel.ISupportInitialize)setPointNumericUpDown).EndInit();
             ((System.ComponentModel.ISupportInitialize)ifGainTrackBar).EndInit();
             ((System.ComponentModel.ISupportInitialize)ppmNumericUpDown).EndInit();
@@ -491,8 +627,18 @@ namespace SDRSharp.SDRplay
         private SDRSharp.PanView.DoubleBufferedNumericUpDown ppmNumericUpDown;
         private System.Windows.Forms.CheckBox receiverCheckBox;
         private System.Windows.Forms.CheckBox clientCheckBox;
+        private System.Windows.Forms.CheckBox diversityCheckBox;
         private SDRSharp.PanView.DoubleBufferedTableLayoutPanel toggleTableLayoutPanel;
         private SDRSharp.PanView.DoubleBufferedTableLayoutPanel mainTableLayoutPanel;
+        private System.Windows.Forms.Label modeLabel;
+        private SDRSharp.PanView.DoubleBufferedComboBox modeComboBox;
+        private System.Windows.Forms.Label lnaBCaptionLabel;
+        private System.Windows.Forms.Label lnaBValueLabel;
+        private SDRSharp.PanView.DoubleBufferedTrackBar lnaBTrackBar;
+        private System.Windows.Forms.Label ifGainBCaptionLabel;
+        private System.Windows.Forms.Label ifGainBValueLabel;
+        private SDRSharp.PanView.DoubleBufferedTrackBar ifGainBTrackBar;
+        private System.Windows.Forms.Button copyGainButton;
         private System.Windows.Forms.Timer refreshTimer;
         private System.Windows.Forms.ToolTip toolTip;
     }

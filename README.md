@@ -24,8 +24,12 @@ official SDRplay API, and feeds the samples to SDR#'s built-in **AIRSPY Server N
 - Full RSPduo gain control from the plugin window: LNA state (dB values from the SDRplay tables per band
   and port), AGC (Off / Fast / Medium / Slow), AGC set-point and manual IF gain reduction.
 - Antenna selection while receiving: Tuner 1 50 Ω, Tuner 1 Hi-Z, Tuner 2 50 Ω.
+- **Diversity** (RSPduo Dual Tuner mode): both tuners receive at once, 2 MS/s each, and SDR# gets one stream:
+  Tuner 1, Tuner 2 or the sum Tuner 1 + w · Tuner 2. The weight w is set on a phase wheel and a gain slider, or
+  found automatically: **Null** cancels the strongest interference, **Max** adds the tuners in phase.
+  Gain is set per tuner. See the [user guide](docs/USER-GUIDE.md#6-diversity).
 - Bias-T (Tuner 2), MW/FM, DAB and AM notch filters, frequency correction in ppm.
-- Two dockable status windows: receiver state and SpyServer client state.
+- Three dockable windows: receiver state, SpyServer client state and Diversity.
 - Light and dark theme following SDR#.
 - All settings are stored in `SDRSharp.config`.
 - Local only: the bridge listens on `127.0.0.1`.
@@ -65,7 +69,7 @@ You do not need the source code to use the plugin. Download the ready-made archi
 
 SDR# clears **Use full IQ** at every reconnection; tick it again each time.
 
-You can find the full instructions [here](docs/USER-GUIDE.md).
+You can find the full instructions [here](docs/USER-GUIDE.md). The changes between versions are in the [changelog](CHANGELOG.md).
 
 ## Known limitations
 
@@ -73,8 +77,12 @@ You can find the full instructions [here](docs/USER-GUIDE.md).
 - **Use full IQ** must be ticked again after each reconnection (SDR# clears it).
 - After a reconnection SDR# puts the VFO back on the centre frequency: SDR# sends the bridge only its centre
   frequency, so the VFO offset stays inside SDR#.
-- A new sample rate applies at the next connection of the SDR# source.
-- Single tuner mode only (no dual tuner or diversity reception).
+- A new sample rate or a new mode (Single Tuner / Diversity) applies at the next connection of the SDR# source
+  (Stop, then Play).
+- Diversity runs at 2 MS/s on the 50 Ω ports only; the sample rate and antenna are fixed and the AGC is off
+  in this mode.
+- The phase between the tuners is random after every retune: repeat Null / Max (or tick **Auto after retune**).
+- Two antennas cancel one interference source at a time; the depth is limited by its coherence between them.
 - The bridge sends 16-bit IQ only (PCM 16) and no FFT.
 
 ## Building from source
