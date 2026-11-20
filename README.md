@@ -106,7 +106,10 @@ The project file references the VDK libraries by relative paths (`..\lib\ref\*.d
 
 1. Unpack `vdk.zip` and place its `lib` folder in `<workspace>`.
 2. Clone the repository into `<workspace>`:
-   `git clone <repository URL> sdrsharp-sdrplay`.
+
+   ```powershell
+   git clone https://github.com/sq5gn/sdrsharp-sdrplay.git
+   ```
 3. Unpack SDR# into `sdrsharp-sdrplay\sdrsharp-x64\`, so that `sdrsharp-x64\SDRSharp.exe` exists. The
    folder is ignored by git. The build stops with an error when `SDRSharp.exe` is missing there.
 4. Close SDR# if it is running (it locks the plugin files), then build:

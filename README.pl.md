@@ -106,7 +106,10 @@ Plik projektu odwołuje się do bibliotek VDK ścieżkami względnymi (`..\lib\r
 
 1. Rozpakuj `vdk.zip` i umieść jego folder `lib` w `<katalog-roboczy>`.
 2. Sklonuj repozytorium do `<katalog-roboczy>`:
-   `git clone <adres repozytorium> sdrsharp-sdrplay`.
+
+   ```powershell
+   git clone https://github.com/sq5gn/sdrsharp-sdrplay.git
+   ```
 3. Rozpakuj SDR# do `sdrsharp-sdrplay\sdrsharp-x64\`, tak aby istniał plik `sdrsharp-x64\SDRSharp.exe`.
    Folder jest ignorowany przez git. Gdy brakuje tam `SDRSharp.exe`, kompilacja kończy się błędem.
 4. Zamknij SDR#, jeśli działa (blokuje pliki wtyczki), i zbuduj projekt:
