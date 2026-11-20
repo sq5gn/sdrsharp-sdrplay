@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "SDR#": {
+      "commandName": "Executable",
+      "executablePath": "$(ProjectDir)sdrsharp-x64\\SDRSharp.exe",
+      "workingDirectory": "$(ProjectDir)sdrsharp-x64"
+    }
+  }
+}

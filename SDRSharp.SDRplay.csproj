@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Library</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Platforms>AnyCPU</Platforms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AssemblyName>SDRSharp.SDRplay</AssemblyName>
+    <RootNamespace>SDRSharp.SDRplay</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);sdrsharp\**;lib\**;tools\**;docs\**</DefaultItemExcludes>
+    <SDRSharpDir>$(MSBuildProjectDirectory)\sdrsharp-x64\</SDRSharpDir>
+    <!-- Keeps local folder names out of the binary (source and PDB paths). -->
+    <PathMap>$(MSBuildProjectDirectory)=.</PathMap>
+  </PropertyGroup>
+
+  <!-- Compile-time only: SDR# supplies its own copies at run time, so nothing is copied (Private=false). -->
+  <ItemGroup>
+    <Reference Include="SDRSharp.Common">
+      <HintPath>..\lib\ref\SDRSharp.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SDRSharp.Radio">
+      <HintPath>..\lib\ref\SDRSharp.Radio.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SDRSharp.PluginsCom">
+      <HintPath>..\lib\ref\SDRSharp.PluginsCom.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SDRSharp.PanView">
+      <HintPath>..\lib\SDRSharp.PanView.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\*.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="SettingsPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="SettingsPanel.Designer.cs">
+      <DependentUpon>SettingsPanel.cs</DependentUpon>
+    </Compile>
+    <Compile Update="StatusPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="StatusPanel.Designer.cs">
+      <DependentUpon>StatusPanel.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <!-- Deploys the build output to sdrsharp-x64\Plugins\<AssemblyName>\ (README, Building from source). -->
+  <Target Name="DeployToSDRSharp" AfterTargets="Build">
+    <Error Condition="!Exists('$(SDRSharpDir)SDRSharp.exe')" Text="sdrsharp-x64\SDRSharp.exe not found: unpack SDR# there first (README, Building from source)." />
+    <ItemGroup>
+      <_PluginFiles Include="$(OutDir)**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PluginFiles)" DestinationFolder="$(SDRSharpDir)Plugins\$(AssemblyName)\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

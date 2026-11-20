@@ -1,0 +1,9 @@
+# SDR# (binaria Airspy) i VDK to pomoce lokalne, nie trafiają do repo
+sdrsharp-x64/
+
+# Artefakty builda
+bin/
+obj/
+.vs/
+*.user
+*.zip
