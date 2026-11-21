@@ -11,7 +11,7 @@ the versions follow [Semantic Versioning](https://semver.org/).
 
 ## 1.2.0 - 2026-11-21
 
-Diversity: Null on a signal marked with the SDR# filter (issue #36).
+Diversity: Null on a signal marked with the SDR# filter.
 
 ### Added
 
@@ -32,7 +32,7 @@ Diversity: Null on a signal marked with the SDR# filter (issue #36).
 
 ## 1.1.0 - 2026-11-20
 
-Diversity reception with both RSPduo tuners (issue #36).
+Diversity reception with both RSPduo tuners.
 
 ### Added
 
