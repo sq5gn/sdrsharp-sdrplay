@@ -3,7 +3,7 @@ using System;
 
 namespace SDRSharp.SDRplay
 {
-    // Measures the two tuners in one band of the stream (issue #36, stage 5): the band is shifted to 0 and
+    // Measures the two tuners in one band of the stream: the band is shifted to 0 and
     // decimated (DownConverter), low-pass filtered to its width (ComplexFilter), then Raa = sum |A|^2,
     // Rbb = sum |B|^2 and Rab = sum A * conj(B) are summed over the filtered samples. A and B go through
     // identical objects, so the phase between them is kept. Used by the stream thread only (DiversityCombiner).

@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace SDRSharp.SDRplay
 {
-    // Diversity combination of the two RSPduo tuners (issue #36, stages 3 and 5): out = A + w * B, w = g * e^(j phi).
+    // Diversity combination of the two RSPduo tuners: out = A + w * B, w = g * e^(j phi).
     // Pairs the packets of tuner A and tuner B with the same first sample number (measured: always equal) and
     // measures both streams over windows of about 100 ms.
     // Auto (closed form, Rab = sum A * conj(B), Raa = sum |A|^2, Rbb = sum |B|^2):
@@ -285,7 +285,7 @@ namespace SDRSharp.SDRplay
             }
         }
 
-        // After a retune: the phase between the tuners is new (issue #36, stage 1b); repeats the last auto.
+        // After a retune: the phase between the tuners is new; repeats the last auto.
         public void RepeatAuto()
         {
             RequestAuto(_lastAuto);

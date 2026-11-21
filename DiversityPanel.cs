@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 namespace SDRSharp.SDRplay
 {
-    // Front panel "Diversity" (issue #36, stage 3): what goes to SDR# (tuner 1, tuner 2 or A + w * B), the weight
+    // Front panel "Diversity": what goes to SDR# (tuner 1, tuner 2 or A + w * B), the weight
     // w = g * e^(j phi) on the phase wheel and the gain slider, the Null / Max auto, and the measurements.
     // A separate docked window by the user's choice, so that the plugin window keeps the receiver settings.
     public class DiversityPanel : StatusPanel

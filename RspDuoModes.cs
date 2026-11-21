@@ -2,7 +2,7 @@ namespace SDRSharp.SDRplay
 {
     // Operating modes offered in the plugin window. Diversity runs the RSPduo in Dual Tuner mode (API spec 3.15,
     // section 1): both tuners at 2 MS/s each, Low-IF (ADC 6 MHz, IF 1.620 MHz, filter 1.536 MHz), 50 ohm ports only.
-    // The values were measured on the device (issue #36, stage 1b).
+    // The values were measured on the device.
     public static class RspDuoModes
     {
         public const int Single = 0;

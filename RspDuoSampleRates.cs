@@ -1,7 +1,7 @@
 namespace SDRSharp.SDRplay
 {
     // Sample rates offered for the RSPduo in Single Tuner, zero IF, each with the widest IF filter below it.
-    // Filter values: sdrplay_api_Bw_MHzT (sdrplay_api_tuner.h). The rates were checked on the device (issue #1).
+    // Filter values: sdrplay_api_Bw_MHzT (sdrplay_api_tuner.h). The rates were checked on the device.
     public static class RspDuoSampleRates
     {
         public static readonly int[] SampleRate = new int[] { 2000000, 6000000, 8000000, 10000000 }; // S/s

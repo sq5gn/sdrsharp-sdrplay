@@ -55,7 +55,7 @@ namespace SDRSharp.SDRplay
         private IntPtr _deviceParams; // SDRplayDeviceParams*, owned by the API like _channel
 
         // Diversity (Dual Tuner mode): _channel is tuner A, _channelB tuner B. AGC is off on both: the AGC of each
-        // tuner would change the A/B level ratio that the combination relies on (issue #36).
+        // tuner would change the A/B level ratio that the combination relies on.
         private volatile int _mode = RspDuoModes.Default; // requested in the window
         private volatile int _activeMode = RspDuoModes.Default; // fixed for the client session
         private volatile int _output = SDRplayApi.TunerA; // Diversity: the tuner whose stream goes to SDR#
@@ -196,7 +196,7 @@ namespace SDRSharp.SDRplay
                         SetGain(channelB, SDRplayApi.TunerB);
                         if (reason == SDRplayApi.UpdateTunerFrf && reasonB == SDRplayApi.UpdateTunerFrf)
                         {
-                            // One call tunes both (measured, issue #36 stage 1b).
+                            // One call tunes both (measured).
                             Check("Update Frf", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerBoth, reason, SDRplayApi.UpdateExt1None));
                         }
                         else
@@ -204,7 +204,7 @@ namespace SDRSharp.SDRplay
                             Check("Update Frf A", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerA, reason, SDRplayApi.UpdateExt1None));
                             Check("Update Frf B", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerB, reasonB, SDRplayApi.UpdateExt1None));
                         }
-                        // The retune gives the tuners a new phase difference (issue #36, stage 1b).
+                        // The retune gives the tuners a new phase difference.
                         if (_autoAfterRetune)
                         {
                             _combiner.RepeatAuto();
