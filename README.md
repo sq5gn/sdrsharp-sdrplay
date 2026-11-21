@@ -26,7 +26,8 @@ official SDRplay API, and feeds the samples to SDR#'s built-in **AIRSPY Server N
 - Antenna selection while receiving: Tuner 1 50 Ω, Tuner 1 Hi-Z, Tuner 2 50 Ω.
 - **Diversity** (RSPduo Dual Tuner mode): both tuners receive at once, 2 MS/s each, and SDR# gets one stream:
   Tuner 1, Tuner 2 or the sum Tuner 1 + w · Tuner 2. The weight w is set on a phase wheel and a gain slider, or
-  found automatically: **Null** cancels the strongest interference, **Max** adds the tuners in phase.
+  found automatically: **Null** cancels the strongest interference or a signal marked with the SDR# filter
+  (for example a neighbouring station), **Max** adds the tuners in phase.
   Gain is set per tuner. See the [user guide](docs/USER-GUIDE.md#6-diversity).
 - Bias-T (Tuner 2), MW/FM, DAB and AM notch filters, frequency correction in ppm.
 - Three dockable windows: receiver state, SpyServer client state and Diversity.
@@ -83,6 +84,7 @@ You can find the full instructions [here](docs/USER-GUIDE.md). The changes betwe
   in this mode.
 - The phase between the tuners is random after every retune: repeat Null / Max (or tick **Auto after retune**).
 - Two antennas cancel one interference source at a time; the depth is limited by its coherence between them.
+- Null on a marked band and Max are not verified with the SDR# frequency shift (upconverter).
 - The bridge sends 16-bit IQ only (PCM 16) and no FFT.
 
 ## Building from source

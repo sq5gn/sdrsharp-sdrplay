@@ -32,13 +32,47 @@ namespace SDRSharp.SDRplay
         // is the table's natural size: scroll bars appear when the window is smaller than the rows.
         protected override void OnLayout(LayoutEventArgs e)
         {
-            var size = mainTableLayoutPanel.GetPreferredSize(System.Drawing.Size.Empty);
+            var size = new System.Drawing.Size(ScrollsHorizontally ? MinimumRowsWidth() : 0, RowsHeight);
             if (AutoScrollMinSize != size)
             {
                 AutoScrollMinSize = size;
             }
             base.OnLayout(e);
         }
+
+        // Natural height of all rows, px.
+        protected int RowsHeight => mainTableLayoutPanel.GetPreferredSize(System.Drawing.Size.Empty).Height;
+
+        // Width the rows need, px: the widest caption plus the widest value (controls sized by their text). The
+        // stretching controls (slider, buttons, editors, the phase wheel) are left out: they follow the window, and
+        // the preferred size of the table counts their current width, so a window made wider could never be made
+        // narrower again.
+        private int MinimumRowsWidth()
+        {
+            var captionWidth = 0;
+            var valueWidth = 0;
+            foreach (Control control in mainTableLayoutPanel.Controls)
+            {
+                if (!control.AutoSize || mainTableLayoutPanel.GetColumnSpan(control) > 1)
+                {
+                    continue;
+                }
+                var width = control.GetPreferredSize(System.Drawing.Size.Empty).Width + control.Margin.Horizontal;
+                if (mainTableLayoutPanel.GetColumn(control) == 0)
+                {
+                    captionWidth = Math.Max(captionWidth, width);
+                }
+                else
+                {
+                    valueWidth = Math.Max(valueWidth, width);
+                }
+            }
+            return captionWidth + valueWidth;
+        }
+
+        // false: the rows always follow the width of the window, no horizontal scroll bar (a panel whose rows all
+        // stretch or are short); true: a value wider than the window can be scrolled to (long device messages).
+        protected bool ScrollsHorizontally { get; set; } = true;
 
         public void StopRefresh()
         {

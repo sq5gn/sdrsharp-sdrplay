@@ -1,5 +1,9 @@
 using SDRSharp.Common;
+using SDRSharp.PanView;
 using SDRSharp.Radio;
+using System;
+using System.ComponentModel;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace SDRSharp.SDRplay
@@ -15,6 +19,9 @@ namespace SDRSharp.SDRplay
         private ReceiverPanel _receiverPanel;
         private ClientPanel _clientPanel;
         private DiversityPanel _diversityPanel;
+        private bool _cursorOverReference; // paint handler only: the hover title is ours to clear
+
+        private static readonly Color ReferenceColor = Color.FromArgb(30, 180, 170);
 
         public UserControl Gui
         {
@@ -55,6 +62,12 @@ namespace SDRSharp.SDRplay
             _source.IFGainReductionB = Utils.GetIntSetting("plugin.sdrplay.ifGainReductionB", 50);
             _source.AutoAfterRetune = Utils.GetBooleanSetting("plugin.sdrplay.autoAfterRetune");
             _source.Combiner.SetWeight(Utils.GetDoubleSetting("plugin.sdrplay.diversityPhase", 0), Utils.GetDoubleSetting("plugin.sdrplay.diversityGain", 0));
+            if (Utils.GetBooleanSetting("plugin.sdrplay.referenceEnabled"))
+            {
+                _source.Combiner.SetReference(Utils.GetLongSetting("plugin.sdrplay.referenceLow", 0), Utils.GetLongSetting("plugin.sdrplay.referenceHigh", 0));
+            }
+            _control.PropertyChanged += control_PropertyChanged;
+            UpdateBands();
             _bridge = new SpyServerBridge(_source);
             _bridge.Port = Utils.GetIntSetting("plugin.sdrplay.port", 5555);
             _bridge.Enabled = Utils.GetBooleanSetting("plugin.sdrplay.enabled");
@@ -65,6 +78,110 @@ namespace SDRSharp.SDRplay
             _control.RegisterFrontControl(_clientPanel, PluginPosition.Bottom);
             _diversityPanel = new DiversityPanel(_bridge, _source, _control);
             _control.RegisterFrontControl(_diversityPanel, PluginPosition.Right);
+            _control.SpectrumAnalyzerCustomPaint += spectrumAnalyzer_CustomPaint;
+        }
+
+        // The reference band on the SDR# spectrum, in Diversity mode (VDK 05-ui.md 5.5).
+        private void spectrumAnalyzer_CustomPaint(object sender, CustomPaintEventArgs e)
+        {
+            long low;
+            long high;
+            // Only while the plugin streams Diversity: SDR# may play another source with the plugin off.
+            if (!_bridge.Enabled || !_source.IsStreaming || _source.ActiveMode != RspDuoModes.Diversity || !_source.Combiner.GetReference(out low, out high))
+            {
+                ClearReferenceTitle(e);
+                return;
+            }
+
+            Utils.ConfigureGraphics(e.Graphics, false);
+
+            var spectrum = (SpectrumAnalyzer)sender;
+            var x1 = (int)Math.Max(Waterfall.AxisMargin, spectrum.FrequencyToPoint(low));
+            var x2 = (int)Math.Min(spectrum.Width - Waterfall.AxisMargin, spectrum.FrequencyToPoint(high));
+            if (x2 <= x1)
+            {
+                return;
+            }
+            var top = Waterfall.AxisMargin;
+            var bottom = spectrum.Height - Waterfall.AxisMargin;
+            using (var brush = new SolidBrush(Color.FromArgb(60, ReferenceColor)))
+            {
+                e.Graphics.FillRectangle(brush, x1, top, x2 - x1, bottom - top);
+            }
+            using (var pen = new Pen(ReferenceColor, 2))
+            {
+                e.Graphics.DrawLine(pen, x1, top, x1, bottom);
+                e.Graphics.DrawLine(pen, x2, top, x2, bottom);
+            }
+            var cursor = e.CursorPosition;
+            if (cursor.X >= x1 && cursor.X <= x2 && cursor.Y >= top && cursor.Y <= bottom)
+            {
+                _cursorOverReference = true;
+                e.CustomTitle = "Diversity reference band (Null)";
+            }
+            else
+            {
+                ClearReferenceTitle(e);
+            }
+        }
+
+        private void ClearReferenceTitle(CustomPaintEventArgs e)
+        {
+            if (_cursorOverReference)
+            {
+                _cursorOverReference = false;
+                e.CustomTitle = string.Empty;
+            }
+        }
+
+        // The SDR# filter and the frequency domain reach the combiner at once, for a Max or a repeat after a retune;
+        // storing them is all the handler does.
+        private void control_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case "Frequency":
+                case "FilterBandwidth":
+                case "DetectorType":
+                case "FrequencyShift":
+                case "FrequencyShiftEnabled":
+                case "SwapIq":
+                    UpdateBands();
+                    break;
+            }
+        }
+
+        private void UpdateBands()
+        {
+            long low;
+            long high;
+            FilterPassband(_control, out low, out high);
+            _source.Combiner.SetFilterBand(low, high);
+            _source.Combiner.FrequencyShift = _control.FrequencyShiftEnabled ? _control.FrequencyShift : 0;
+            _source.Combiner.SpectrumInverted = _control.SwapIq;
+        }
+
+        // Passband of the SDR# channel filter in the display domain, Hz (VDK 02-stream-hooks.md 2.4: USB [0, +bw],
+        // LSB [-bw, 0], the other modes centred on the VFO).
+        private static void FilterPassband(ISharpControl control, out long low, out long high)
+        {
+            var vfo = control.Frequency;
+            long bandwidth = control.FilterBandwidth;
+            switch (control.DetectorType)
+            {
+                case DetectorType.USB:
+                    low = vfo;
+                    high = vfo + bandwidth;
+                    break;
+                case DetectorType.LSB:
+                    low = vfo - bandwidth;
+                    high = vfo;
+                    break;
+                default:
+                    low = vfo - bandwidth / 2;
+                    high = vfo + bandwidth / 2;
+                    break;
+            }
         }
 
         public void Close()
@@ -89,6 +206,11 @@ namespace SDRSharp.SDRplay
             Utils.SaveSetting("plugin.sdrplay.autoAfterRetune", _source.AutoAfterRetune);
             Utils.SaveSetting("plugin.sdrplay.diversityPhase", _source.Combiner.Phase);
             Utils.SaveSetting("plugin.sdrplay.diversityGain", _source.Combiner.GainDB);
+            long referenceLow;
+            long referenceHigh;
+            Utils.SaveSetting("plugin.sdrplay.referenceEnabled", _source.Combiner.GetReference(out referenceLow, out referenceHigh));
+            Utils.SaveSetting("plugin.sdrplay.referenceLow", referenceLow);
+            Utils.SaveSetting("plugin.sdrplay.referenceHigh", referenceHigh);
             _bridge.Enabled = false;
             _receiverPanel.StopRefresh();
             _clientPanel.StopRefresh();

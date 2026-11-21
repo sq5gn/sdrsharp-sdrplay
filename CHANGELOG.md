@@ -5,8 +5,30 @@
 All notable changes of the plugin. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the versions follow [Semantic Versioning](https://semver.org/).
 
+- [1.2.0 - 2026-11-21](#120---2026-11-21)
 - [1.1.0 - 2026-11-20](#110---2026-11-20)
 - [1.0.0 - 2026-11-20](#100---2026-11-20)
+
+## 1.2.0 - 2026-11-21
+
+Diversity: Null on a signal marked with the SDR# filter (issue #36).
+
+### Added
+
+- Diversity: **Mark** takes the SDR# filter passband as the reference band and **Null** cancels the signal in
+  it (for example a neighbouring station or a spur), measured for 1 s; **Clear** goes back to the whole band.
+  The reference band is drawn on the SDR# spectrum and stored in `SDRSharp.config`.
+- Diversity window: the reference band and **Last Auto** (the band measured and the coherence in it).
+
+### Changed
+
+- **Max** measures the SDR# filter passband (1 s) instead of the whole band.
+- The Diversity measurements (combined level, coherence, null depth limit, saturated samples, unpaired
+  packets) moved to the **RSPduo** window; the phase wheel follows the size of the Diversity window.
+
+### Known issues
+
+- Null on a marked band and Max are not verified with the SDR# frequency shift (upconverter).
 
 ## 1.1.0 - 2026-11-20
 

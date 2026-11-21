@@ -104,6 +104,11 @@ Trzy przyciski z ikonami na dole okna wtyczki pokazują i ukrywają trzy okna do
 | Gain reduction | Całkowite tłumienie w dB (LNA plus IF). |
 | System gain | Wzmocnienie systemowe raportowane przez odbiornik. |
 | Signal level | Poziom każdego tunera w dBFS (tylko w Diversity). |
+| Combined Level | Poziom sumy Tuner 1 + w · Tuner 2 w dBFS (tylko w Diversity). |
+| Coherence | Korelacja obu tunerów, od 0 do 1 (tylko w Diversity). |
+| Null Depth Limit | Najgłębsze zerowanie, na jakie pozwala bieżąca koherencja, 10·log10(1 − c²) (tylko w Diversity). |
+| Saturated Samples | Próbki sumy obcięte (przesterowane), na 100 ms (tylko w Diversity). |
+| Unpaired Packets | Pakiety jednego tunera, które dotarły bez pakietu drugiego (tylko w Diversity). |
 | ADC overload | Ostrzeżenie o przesterowaniu przetwornika ADC. Zwiększ stan LNA lub tłumienie IF. |
 | Measured rate | Rzeczywista szybkość próbkowania dostarczana przez odbiornik. |
 | Overruns | Liczba pominiętych bloków próbek, gdy klient nie nadążał. |
@@ -157,29 +162,39 @@ Sygnał połączony to `Tuner 1 + w · Tuner 2`, gdzie waga w ma fazę φ i wzmo
 | **Output** | Co trafia do SDR#: **Tuner 1**, **Tuner 2** albo **Combined**. |
 | **Phase (Tuner 2)** | Faza φ Tunera 2 w sumie. Przeciągnij wskazówkę koła albo kręć kółkiem myszy nad kołem (1°, z Shiftem 10°). 0° jest u góry, zgodnie z ruchem wskazówek zegara. |
 | **Gain (Tuner 2)** | Poziom g Tunera 2 względem Tunera 1 w sumie, od −30 do +30 dB co 0,1 dB. |
-| **Null** | Mierzy przez 0,1 s i ustawia φ oraz g tak, by moc na wyjściu była minimalna: wygasza najsilniejszy sygnał w paśmie. |
-| **Max** | Mierzy przez 0,1 s i ustawia φ oraz g tak, by tunery dodawały się w fazie (łączenie z maksymalnym stosunkiem); przy dwóch jednakowych antenach daje do około 3 dB w stosunku sygnału do szumu. |
+| **Null** | Ustawia φ oraz g tak, by moc na wyjściu w mierzonym paśmie była minimalna: wygasza najsilniejszy sygnał w nim. Z pasmem odniesienia mierzy to pasmo przez 1 s; bez niego całe pasmo przez 0,1 s. |
+| **Max** | Mierzy pasmo filtra SDR# przez 1 s i ustawia φ oraz g tak, by tunery dodawały się w nim w fazie (łączenie z maksymalnym stosunkiem); przy dwóch jednakowych antenach daje do około 3 dB w stosunku sygnału do szumu. |
+| **Reference (Null)** | Pasmo, które mierzy Null, w kHz, albo `Whole band`. Jest rysowane na widmie SDR# jako turkusowy pas. |
+| **Mark** | Ustawia bieżące pasmo filtra SDR# jako pasmo odniesienia. |
+| **Clear** | Usuwa pasmo odniesienia: Null znowu mierzy całe pasmo. |
 | **Auto after retune** | Powtarza ostatni Null lub Max po każdej zmianie częstotliwości. |
 | Status | `Not streaming`, `Mode is Single Tuner`, `Measuring...` albo `Running`. |
-| Level Tuner 1 / Tuner 2 / Combined | Poziomy sygnałów w dBFS. |
-| Coherence | Korelacja obu tunerów, od 0 do 1. |
-| Null Depth Limit | Najgłębsze zerowanie, na jakie pozwala bieżąca koherencja, 10·log10(1 − c²). |
-| Saturated Samples | Próbki sumy obcięte (przesterowane), na 100 ms. |
-| Unpaired Packets | Pakiety jednego tunera, które dotarły bez pakietu drugiego. |
+| Last Auto | Ostatni Null lub Max: zmierzone pasmo (`ref` = pasmo odniesienia, `filter`, `whole`; `whole*` = pasmo nie nadawało się do użycia) i koherencja `c` tunerów w nim. |
 
 Koło i suwak podążają za wynikiem Null i Max, więc można od niego dostroić ręcznie. Wartości są zapisywane
 razem z pozostałymi ustawieniami.
 
 **Praca z Null**
 
-1. Ustaw takie samo wzmocnienie na obu tunerach i sprawdź, czy **Saturated Samples** zostaje na 0.
+1. Ustaw takie samo wzmocnienie na obu tunerach i sprawdź, czy **Saturated Samples** (okno RSPduo) zostaje na 0.
 2. Dostrój do miejsca, w którym zakłócenie jest wyraźnie najsilniejszym sygnałem, ustaw **Output** na
    **Combined** i kliknij **Null**. Poziom zakłócenia w SDR# spada; dostrój kołem i suwakiem.
 3. Przestrojenie: po każdej zmianie częstotliwości faza między tunerami jest znowu losowa. Kliknij **Null**
    ponownie albo zaznacz **Auto after retune**.
 
 Null wygasza to, co jest najsilniejsze w paśmie. Jeśli stacja pożądana jest silniejsza niż zakłócenie, Null
-wygasi stację: użyj wtedy **Max** albo ustaw koło ręcznie.
+wygasi stację: zaznacz najpierw zakłócenie (niżej), użyj **Max** albo ustaw koło ręcznie.
+
+**Null na zaznaczonym sygnale** (sąsiednia stacja, prążek obok sygnału pożądanego)
+
+1. Przesuń filtr SDR# na niechciany sygnał, w miejsce, gdzie nie ma pożądanego, i kliknij **Mark**. Pasmo
+   pojawi się na widmie na turkusowo.
+2. Wróć filtrem na stację pożądaną i kliknij **Null**. Po około 1 s zaznaczony sygnał opada; **Last Auto**
+   pokazuje `Null, ref` i koherencję w tym paśmie.
+
+Waga jest jedna dla całego strumienia, więc zaznaczony sygnał opada wszędzie, także tam, gdzie w filtrze
+nakłada się na stację pożądaną: tego sam filtr nie potrafi. Stacja pożądana zostaje tylko wtedy, gdy anteny
+odbierają ją inaczej niż zaznaczony sygnał.
 
 **Ograniczenia**
 
@@ -187,7 +202,8 @@ wygasi stację: użyj wtedy **Max** albo ustaw koło ręcznie.
 - Anteny muszą odbierać zakłócenie inaczej niż sygnał pożądany. Dwie jednakowe anteny tuż obok siebie
   odbierają prawie to samo; inna polaryzacja (np. jedna antena pionowo, druga poziomo) albo odstęp dają
   materiał do pracy.
-- Null i Max używają całego pasma 2 MHz; wybór pasma odniesienia jest planowany (issue #36).
+- Pasmo odniesienia albo pasmo filtra szersze niż 25 kHz lub poza strumieniem nie jest używane: pomiar wraca
+  do całego pasma (**Last Auto** to pokazuje).
 
 ## 7. Wskazówki praktyczne
 
@@ -228,5 +244,8 @@ wygasi stację: użyj wtedy **Max** albo ustaw koło ręcznie.
 - Diversity: tylko 2 MS/s, tylko porty 50 Ω (bez Hi-Z), AGC wyłączone; Sample Rate i Antenna są stałe.
 - Diversity: faza między tunerami jest losowa po każdym przestrojeniu; powtórz Null / Max albo użyj
   **Auto after retune**.
-- Diversity: Null i Max używają całego pasma 2 MHz. Dwie anteny wygaszają jedno źródło zakłóceń naraz.
+- Diversity: jedna waga dla całego strumienia; dwie anteny wygaszają jedno źródło zakłóceń naraz. Mierzone
+  pasmo ma najwyżej 25 kHz szerokości.
+- Diversity: Null na zaznaczonym paśmie i Max na filtrze nie są sprawdzone z przesunięciem częstotliwości SDR#
+  (upkonwerter); z włączonym przesunięciem mogą mierzyć złe miejsce.
 - Tylko PCM 16; most nie wysyła FFT.

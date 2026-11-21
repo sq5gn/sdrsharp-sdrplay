@@ -168,6 +168,7 @@ namespace SDRSharp.SDRplay
                 lock (_apiLock)
                 {
                     Interlocked.Exchange(ref _frequency, value);
+                    _combiner.CenterFrequency = value;
                     // A band with fewer LNA states: the state above its range becomes the band's last state. The API
                     // rejects a frequency whose band has no such LNA state (measured: OutOfRange going from LNA 8 at
                     // 100 MHz to 6.3 MHz), so the clamped state goes in the same Update as the frequency.
@@ -681,6 +682,7 @@ namespace SDRSharp.SDRplay
             _reportedIFGainReductionB = -1;
             _reportedLnaGainReductionB = -1;
             _combiner.SampleRate = ActiveSampleRate >> _decimationStage;
+            _combiner.CenterFrequency = Frequency;
             _combiner.Reset();
             _overload = false;
             _reportedIFGainReduction = -1;

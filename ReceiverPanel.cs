@@ -1,8 +1,10 @@
+using System;
 using System.Windows.Forms;
 
 namespace SDRSharp.SDRplay
 {
-    // Front panel: what the RSPduo is doing. In Diversity the per-tuner rows show "T1 ... | T2 ...".
+    // Front panel: what the RSPduo is doing. In Diversity the per-tuner rows show "T1 ... | T2 ...", and the rows of
+    // the combination (level, coherence, null depth limit, saturated samples, unpaired packets) are filled.
     public class ReceiverPanel : StatusPanel
     {
         private readonly Label _deviceValue;
@@ -13,6 +15,11 @@ namespace SDRSharp.SDRplay
         private readonly Label _gainReductionValue;
         private readonly Label _systemGainValue;
         private readonly Label _levelValue;
+        private readonly Label _combinedValue;
+        private readonly Label _coherenceValue;
+        private readonly Label _nullDepthValue;
+        private readonly Label _saturatedValue;
+        private readonly Label _unpairedValue;
         private readonly Label _overloadValue;
         private readonly Label _measuredRateValue;
         private readonly Label _overrunsValue;
@@ -29,6 +36,11 @@ namespace SDRSharp.SDRplay
             _gainReductionValue = AddRow("Gain Reduction (LNA + IF)");
             _systemGainValue = AddRow("System Gain");
             _levelValue = AddRow("Signal Level");
+            _combinedValue = AddRow("Combined Level");
+            _coherenceValue = AddRow("Coherence");
+            _nullDepthValue = AddRow("Null Depth Limit");
+            _saturatedValue = AddRow("Saturated Samples");
+            _unpairedValue = AddRow("Unpaired Packets");
             _overloadValue = AddRow("ADC Overload");
             _measuredRateValue = AddRow("Measured Rate");
             _overrunsValue = AddRow("Overruns");
@@ -69,6 +81,15 @@ namespace SDRSharp.SDRplay
                 _systemGainValue.Text = "-";
             }
             _levelValue.Text = diversity ? "T1 " + Level(_source.LevelA) + " | T2 " + Level(_source.LevelB) : "-";
+            // Diversity: the sum A + w * B and how alike the two tuners are (DiversityCombiner, per 100 ms).
+            var combiner = _source.Combiner;
+            _combinedValue.Text = diversity ? Level(combiner.LevelOut) : "-";
+            var coherence = diversity ? combiner.Coherence : double.NaN;
+            _coherenceValue.Text = double.IsNaN(coherence) ? "-" : coherence.ToString("0.000");
+            // The deepest null two coherent streams allow: 10 log10(1 - c^2).
+            _nullDepthValue.Text = double.IsNaN(coherence) ? "-" : coherence >= 1 ? "> 60 dB" : (-10 * Math.Log10(1 - coherence * coherence)).ToString("0.0") + " dB";
+            _saturatedValue.Text = diversity ? combiner.Saturated + " per 100 ms" : "-";
+            _unpairedValue.Text = diversity ? combiner.Unpaired + " packets" : "-";
             if (!streaming)
             {
                 _overloadValue.Text = "-";

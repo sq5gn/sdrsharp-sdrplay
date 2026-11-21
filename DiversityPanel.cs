@@ -13,8 +13,8 @@ namespace SDRSharp.SDRplay
     public class DiversityPanel : StatusPanel
     {
         private const int GainSteps = 10; // track bar steps per dB
-        private const int MinWheelSize = 120; // px
-        private const int MaxWheelSize = 400; // px
+        private const int MinWheelSize = 160; // px
+        private const int MaxWheelSize = 300; // px
 
         private readonly ISharpControl _control;
         private readonly DiversityCombiner _combiner;
@@ -25,19 +25,17 @@ namespace SDRSharp.SDRplay
         private readonly DoubleBufferedTrackBar _gainTrackBar;
         private readonly CheckBox _autoAfterRetuneCheckBox;
         private readonly Label _statusValue;
-        private readonly Label _levelAValue;
-        private readonly Label _levelBValue;
-        private readonly Label _levelOutValue;
-        private readonly Label _coherenceValue;
-        private readonly Label _nullDepthValue;
-        private readonly Label _saturatedValue;
-        private readonly Label _unpairedValue;
+        private readonly Label _lastValue;
+        private readonly Label _referenceValue;
 
         public DiversityPanel(SpyServerBridge bridge, SDRplaySource source, ISharpControl control)
             : base(bridge, source, "Diversity")
         {
             _control = control;
             _combiner = source.Combiner;
+            // Every row follows the width of the window (the wheel, the slider and the buttons stretch, the values are
+            // short): no horizontal scroll bar.
+            ScrollsHorizontally = false;
 
             _outputComboBox = new DoubleBufferedComboBox();
             _outputComboBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
@@ -71,9 +69,9 @@ namespace SDRSharp.SDRplay
             _gainTrackBar.ValueChanged += gainTrackBar_Scroll;
             AddSpanRow(_gainTrackBar);
 
-            var nullButton = ActionButton("Null", "Measure and null the strongest signal in the band (minimum output power)");
+            var nullButton = ActionButton("Null", "Measure the reference band (Mark; the whole band without one) and null the signal in it");
             nullButton.Click += nullButton_Click;
-            var maxButton = ActionButton("Max", "Measure and add the tuners in phase (maximal ratio combining)");
+            var maxButton = ActionButton("Max", "Measure the SDR# filter passband and add the tuners in phase there (maximal ratio combining)");
             maxButton.Click += maxButton_Click;
             var buttonTable = new DoubleBufferedTableLayoutPanel();
             buttonTable.Anchor = AnchorStyles.Left | AnchorStyles.Right;
@@ -89,6 +87,25 @@ namespace SDRSharp.SDRplay
             buttonTable.Controls.Add(maxButton, 1, 0);
             AddSpanRow(buttonTable);
 
+            _referenceValue = AddRow("Reference (Null)");
+            var markButton = ActionButton("Mark", "Mark the SDR# filter passband as the reference band: move the filter onto the unwanted signal, click Mark, move back, click Null");
+            markButton.Click += markButton_Click;
+            var clearButton = ActionButton("Clear", "No reference band: Null measures the whole band");
+            clearButton.Click += clearButton_Click;
+            var referenceTable = new DoubleBufferedTableLayoutPanel();
+            referenceTable.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            referenceTable.AutoSize = true;
+            referenceTable.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            referenceTable.ColumnCount = 2;
+            referenceTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            referenceTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            referenceTable.RowCount = 1;
+            referenceTable.RowStyles.Add(new RowStyle());
+            referenceTable.Margin = new Padding(0);
+            referenceTable.Controls.Add(markButton, 0, 0);
+            referenceTable.Controls.Add(clearButton, 1, 0);
+            AddSpanRow(referenceTable);
+
             _autoAfterRetuneCheckBox = new CheckBox();
             _autoAfterRetuneCheckBox.Anchor = AnchorStyles.Left;
             _autoAfterRetuneCheckBox.AutoSize = true;
@@ -99,33 +116,35 @@ namespace SDRSharp.SDRplay
             AddSpanRow(_autoAfterRetuneCheckBox);
 
             _statusValue = AddRow("Status");
-            _levelAValue = AddRow("Level Tuner 1");
-            _levelBValue = AddRow("Level Tuner 2");
-            _levelOutValue = AddRow("Level Combined");
-            _coherenceValue = AddRow("Coherence");
-            _nullDepthValue = AddRow("Null Depth Limit");
-            _saturatedValue = AddRow("Saturated Samples");
-            _unpairedValue = AddRow("Unpaired Packets");
+            _lastValue = AddRow("Last Auto");
 
             var toolTip = new ToolTip();
             toolTip.SetToolTip(_outputComboBox, "What goes to SDR#: tuner 1, tuner 2, or tuner 1 + tuner 2 with the phase and gain below");
             toolTip.SetToolTip(_phaseWheel, "Phase of tuner 2 in the sum: drag, or turn the mouse wheel (1 deg, Shift 10 deg)");
             toolTip.SetToolTip(_gainTrackBar, "Level of tuner 2 relative to tuner 1 in the sum");
             toolTip.SetToolTip(_autoAfterRetuneCheckBox, "Repeat the last Null / Max after every frequency change (a retune changes the phase between the tuners)");
+            toolTip.SetToolTip(_lastValue, "Mode, band measured (ref = reference band, filter = SDR# filter, whole = whole band; whole* = the reference or the filter is wider than 25 kHz or outside the stream), coherence c of the tuners in it");
 
             _control.PropertyChanged += control_PropertyChanged;
             ApplyTheme();
             phaseWheel_PhaseChanged(null, null);
             gainTrackBar_Scroll(null, null);
+            UpdateReference();
         }
 
         // The wheel fills the width of the window (a docked window is as wide as the user makes it).
         protected override void OnClientSizeChanged(EventArgs e)
         {
-            var side = Math.Max(MinWheelSize, Math.Min(ClientSize.Width - 6, MaxWheelSize));
-            if (_phaseWheel != null && _phaseWheel.Width != side)
+            if (_phaseWheel != null)
             {
-                _phaseWheel.Size = new Size(side, side);
+                // The wheel takes what the other rows leave of the window, in width and in height.
+                var otherRows = RowsHeight - _phaseWheel.Height;
+                var side = Math.Min(ClientSize.Width - 6, ClientSize.Height - otherRows);
+                side = Math.Max(MinWheelSize, Math.Min(side, MaxWheelSize));
+                if (_phaseWheel.Width != side)
+                {
+                    _phaseWheel.Size = new Size(side, side);
+                }
             }
             base.OnClientSizeChanged(e);
         }
@@ -188,6 +207,38 @@ namespace SDRSharp.SDRplay
             _combiner.RequestAuto(DiversityCombiner.AutoMax);
         }
 
+        private void markButton_Click(object sender, EventArgs e)
+        {
+            long low;
+            long high;
+            if (_combiner.GetFilterBand(out low, out high))
+            {
+                _combiner.SetReference(low, high);
+            }
+            UpdateReference();
+        }
+
+        private void clearButton_Click(object sender, EventArgs e)
+        {
+            _combiner.ClearReference();
+            UpdateReference();
+        }
+
+        // Absolute edges, kHz: the band stays on its station while the VFO moves.
+        private void UpdateReference()
+        {
+            long low;
+            long high;
+            if (_combiner.GetReference(out low, out high))
+            {
+                _referenceValue.Text = (low / 1000.0).ToString("0.00") + "-" + (high / 1000.0).ToString("0.00") + " kHz";
+            }
+            else
+            {
+                _referenceValue.Text = "Whole band";
+            }
+        }
+
         private void autoAfterRetuneCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             _source.AutoAfterRetune = _autoAfterRetuneCheckBox.Checked;
@@ -245,20 +296,36 @@ namespace SDRSharp.SDRplay
             {
                 _statusValue.Text = "Running";
             }
-            _levelAValue.Text = diversity ? Level(_combiner.LevelA) : "-";
-            _levelBValue.Text = diversity ? Level(_combiner.LevelB) : "-";
-            _levelOutValue.Text = diversity ? Level(_combiner.LevelOut) : "-";
-            var coherence = diversity ? _combiner.Coherence : double.NaN;
-            _coherenceValue.Text = double.IsNaN(coherence) ? "-" : coherence.ToString("0.000");
-            // The deepest null two coherent streams allow: 10 log10(1 - c^2).
-            _nullDepthValue.Text = double.IsNaN(coherence) ? "-" : coherence >= 1 ? "> 60 dB" : (-10 * Math.Log10(1 - coherence * coherence)).ToString("0.0") + " dB";
-            _saturatedValue.Text = diversity ? _combiner.Saturated + " per 100 ms" : "-";
-            _unpairedValue.Text = diversity ? _combiner.Unpaired.ToString() : "-";
+            _lastValue.Text = LastAuto();
+            UpdateReference();
         }
 
-        private static string Level(double dbfs)
+        // The mode, the band it measured and the coherence of the tuners in that band.
+        private string LastAuto()
         {
-            return double.IsNaN(dbfs) ? "-" : dbfs.ToString("0.0") + " dBFS";
+            string band;
+            switch (_combiner.LastBand)
+            {
+                case DiversityCombiner.BandWhole:
+                    band = "whole";
+                    break;
+                case DiversityCombiner.BandReference:
+                    band = "ref";
+                    break;
+                case DiversityCombiner.BandFilter:
+                    band = "filter";
+                    break;
+                case DiversityCombiner.BandReferenceOutside:
+                    band = "whole*";
+                    break;
+                case DiversityCombiner.BandFilterOutside:
+                    band = "whole*";
+                    break;
+                default:
+                    return "-";
+            }
+            var mode = _combiner.LastMode == DiversityCombiner.AutoNull ? "Null" : "Max";
+            return mode + ", " + band + ", c " + _combiner.LastCoherence.ToString("0.000");
         }
     }
 }

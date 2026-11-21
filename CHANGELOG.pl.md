@@ -5,8 +5,30 @@
 Najważniejsze zmiany we wtyczce. Format wg [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 wersje wg [Semantic Versioning](https://semver.org/lang/pl/).
 
+- [1.2.0 - 2026-11-21](#120---2026-11-21)
 - [1.1.0 - 2026-11-20](#110---2026-11-20)
 - [1.0.0 - 2026-11-20](#100---2026-11-20)
+
+## 1.2.0 - 2026-11-21
+
+Diversity: Null na sygnale zaznaczonym filtrem SDR# (issue #36).
+
+### Dodano
+
+- Diversity: **Mark** ustawia pasmo filtra SDR# jako pasmo odniesienia, a **Null** wygasza sygnał w nim (np.
+  sąsiednią stację albo prążek), z pomiarem 1 s; **Clear** wraca do całego pasma. Pasmo odniesienia jest
+  rysowane na widmie SDR# i zapisywane w `SDRSharp.config`.
+- Okno Diversity: pasmo odniesienia i **Last Auto** (zmierzone pasmo i koherencja w nim).
+
+### Zmieniono
+
+- **Max** mierzy pasmo filtra SDR# (1 s) zamiast całego pasma.
+- Pomiary Diversity (poziom sumy, koherencja, limit głębokości zerowania, próbki obcięte, pakiety
+  niesparowane) przeniesione do okna **RSPduo**; koło fazowe dopasowuje się do rozmiaru okna Diversity.
+
+### Znane problemy
+
+- Null na zaznaczonym paśmie i Max nie są sprawdzone z przesunięciem częstotliwości SDR# (upkonwerter).
 
 ## 1.1.0 - 2026-11-20
 

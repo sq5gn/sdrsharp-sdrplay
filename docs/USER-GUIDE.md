@@ -104,6 +104,11 @@ Three icon buttons at the bottom of the plugin window show and hide three window
 | Gain reduction | Total gain reduction in dB (LNA plus IF). |
 | System gain | System gain reported by the receiver. |
 | Signal level | Level of each tuner in dBFS (Diversity only). |
+| Combined Level | Level of the sum Tuner 1 + w · Tuner 2 in dBFS (Diversity only). |
+| Coherence | Correlation of the two tuners, 0 to 1 (Diversity only). |
+| Null Depth Limit | The deepest null the current coherence allows, 10·log10(1 − c²) (Diversity only). |
+| Saturated Samples | Samples of the sum that clipped, per 100 ms (Diversity only). |
+| Unpaired Packets | Packets of one tuner that arrived without the packet of the other (Diversity only). |
 | ADC overload | Warning when the ADC is overloaded. Raise the LNA state or the IF gain reduction. |
 | Measured rate | Actual sample rate delivered by the receiver. |
 | Overruns | Count of sample blocks dropped because the client was too slow. |
@@ -157,29 +162,39 @@ The combined signal is `Tuner 1 + w · Tuner 2`, where the weight w has a phase 
 | **Output** | What goes to SDR#: **Tuner 1**, **Tuner 2** or **Combined**. |
 | **Phase (Tuner 2)** | Phase φ of Tuner 2 in the sum. Drag the pointer of the wheel, or turn the mouse wheel over it (1°, with Shift 10°). 0° is at the top, clockwise. |
 | **Gain (Tuner 2)** | Level g of Tuner 2 relative to Tuner 1 in the sum, −30 to +30 dB in 0.1 dB steps. |
-| **Null** | Measures for 0.1 s and sets φ and g so that the output power is minimal: the strongest signal in the band is cancelled. |
-| **Max** | Measures for 0.1 s and sets φ and g so that the tuners add in phase (maximal ratio combining); with two equal antennas it gains up to about 3 dB of signal to noise ratio. |
+| **Null** | Sets φ and g so that the output power in the measured band is minimal: the strongest signal there is cancelled. With a reference band it measures that band for 1 s; without one, the whole band for 0.1 s. |
+| **Max** | Measures the SDR# filter passband for 1 s and sets φ and g so that the tuners add in phase there (maximal ratio combining); with two equal antennas it gains up to about 3 dB of signal to noise ratio. |
+| **Reference (Null)** | The band Null measures, in kHz, or `Whole band`. It is drawn on the SDR# spectrum as a turquoise band. |
+| **Mark** | Takes the current SDR# filter passband as the reference band. |
+| **Clear** | Removes the reference band: Null measures the whole band again. |
 | **Auto after retune** | Repeats the last Null or Max after every frequency change. |
 | Status | `Not streaming`, `Mode is Single Tuner`, `Measuring...` or `Running`. |
-| Level Tuner 1 / Tuner 2 / Combined | Signal levels in dBFS. |
-| Coherence | Correlation of the two tuners, 0 to 1. |
-| Null Depth Limit | The deepest null the current coherence allows, 10·log10(1 − c²). |
-| Saturated Samples | Samples of the sum that clipped, per 100 ms. |
-| Unpaired Packets | Packets of one tuner that arrived without the packet of the other. |
+| Last Auto | The last Null or Max: the band it measured (`ref` = reference band, `filter`, `whole`; `whole*` = the band was not usable) and the coherence `c` of the tuners in it. |
 
 The wheel and the slider follow the result of Null and Max, so you can fine-tune from it by hand. The values
 are saved with the other settings.
 
 **Working with Null**
 
-1. Set the same gain on both tuners and check that **Saturated Samples** stays at 0.
+1. Set the same gain on both tuners and check that **Saturated Samples** (RSPduo window) stays at 0.
 2. Tune where the interference is clearly the strongest signal, set **Output** to **Combined** and click
    **Null**. The level of the interference in SDR# drops; fine-tune with the wheel and the slider.
 3. Retune: after every change of frequency the phase between the tuners is random again. Click **Null** again,
    or tick **Auto after retune**.
 
 Null cancels whatever is strongest in the band. If the wanted station is stronger than the interference, Null
-cancels the station: use **Max** for it, or set the wheel by hand.
+cancels the station: mark the interference first (below), use **Max**, or set the wheel by hand.
+
+**Null on a marked signal** (a neighbouring station, a spur next to the wanted signal)
+
+1. Move the SDR# filter onto the unwanted signal, where the wanted one is not, and click **Mark**. The band
+   appears on the spectrum in turquoise.
+2. Move the filter back onto the wanted station and click **Null**. After about 1 s the marked signal drops;
+   **Last Auto** shows `Null, ref` and the coherence in that band.
+
+The weight is one for the whole stream, so the marked signal drops wherever it is, also where it overlaps the
+wanted station inside the filter: this is what the filter alone cannot do. The wanted station stays only if the
+antennas receive it differently from the marked signal.
 
 **Limits**
 
@@ -187,7 +202,8 @@ cancels the station: use **Max** for it, or set the wheel by hand.
 - The antennas must receive the interference differently from the wanted signal. Two identical antennas side
   by side receive almost the same signals; a different polarisation (for example one antenna vertical, one
   horizontal) or spacing gives something to work with.
-- Null and Max use the whole 2 MHz band; the choice of a reference band is planned (issue #36).
+- A reference band or a filter passband wider than 25 kHz, or outside the stream, is not used: the measurement
+  falls back to the whole band (**Last Auto** says so).
 
 ## 7. Working tips
 
@@ -228,5 +244,8 @@ cancels the station: use **Max** for it, or set the wheel by hand.
 - Diversity: 2 MS/s only, 50 Ω ports only (no Hi-Z), AGC off; Sample Rate and Antenna are fixed.
 - Diversity: the phase between the tuners is random after every retune; repeat Null / Max or use
   **Auto after retune**.
-- Diversity: Null and Max use the whole 2 MHz band. Two antennas cancel one interference source at a time.
+- Diversity: one weight for the whole stream; two antennas cancel one interference source at a time. A measured
+  band is at most 25 kHz wide.
+- Diversity: Null on a marked band and Max on the filter are not verified with the SDR# frequency shift
+  (upconverter); with the shift on they may measure the wrong place.
 - PCM 16 only; no FFT is sent by the bridge.

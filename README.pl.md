@@ -26,7 +26,8 @@ oficjalne SDRplay API i przekazuje próbki do wbudowanego źródła SDR# **AIRSP
 - Wybór anteny w trakcie odbioru: Tuner 1 50 Ω, Tuner 1 Hi-Z, Tuner 2 50 Ω.
 - **Diversity** (tryb Dual Tuner RSPduo): oba tunery odbierają jednocześnie, po 2 MS/s, a SDR# dostaje jeden
   strumień: Tuner 1, Tuner 2 albo sumę Tuner 1 + w · Tuner 2. Wagę w ustawia się kołem fazowym i suwakiem
-  wzmocnienia albo automatycznie: **Null** wygasza najsilniejsze zakłócenie, **Max** dodaje tunery w fazie.
+  wzmocnienia albo automatycznie: **Null** wygasza najsilniejsze zakłócenie albo sygnał zaznaczony filtrem
+  SDR# (np. sąsiednią stację), **Max** dodaje tunery w fazie.
   Wzmocnienie ustawia się osobno dla każdego tunera. Zobacz [instrukcję](docs/INSTRUKCJA.md#6-diversity).
 - Bias-T (Tuner 2), filtry notch MW/FM, DAB i AM, korekcja częstotliwości w ppm.
 - Trzy dokowane okna: stanu odbiornika, klienta SpyServer i Diversity.
@@ -83,6 +84,7 @@ Pełną instrukcję znajdziesz [tutaj](docs/INSTRUKCJA.md). Zmiany między wersj
   wyłączone.
 - Faza między tunerami jest losowa po każdym przestrojeniu: powtórz Null / Max (albo zaznacz **Auto after retune**).
 - Dwie anteny wygaszają jedno źródło zakłóceń naraz; głębokość ogranicza jego koherencja między antenami.
+- Null na zaznaczonym paśmie i Max nie są sprawdzone z przesunięciem częstotliwości SDR# (upkonwerter).
 - Most wysyła wyłącznie 16-bitowe IQ (PCM 16) i nie wysyła FFT.
 
 ## Budowanie ze źródeł
