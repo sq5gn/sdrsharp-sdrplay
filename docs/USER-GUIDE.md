@@ -76,7 +76,7 @@ Notes:
 | **AGC** | **Off**, **Fast**, **Medium** or **Slow**: the AGC loop bandwidth of 100, 50 or 5 Hz (higher is faster). Default **Medium**. |
 | **AGC Setpoint (dBFS)** | Target signal level of the AGC. |
 | **IF Gain Reduction** | Manual IF gain reduction, 20–59 dB. Used while the AGC is **Off**. |
-| **Sample Rate** | 2, 6, 8 or 10 MS/s, each with the matching IF filter. |
+| **Sample Rate** | Zero IF: 2, 6, 8 or 10 MS/s, each with the matching IF filter. Low IF: **0.5 MS/s Low IF** with a 200 or 300 kHz IF filter, or **2 MS/s Low IF** with a 1.536 MHz IF filter. |
 | **Antenna** | **Tuner 1 50 Ω**, **Tuner 1 Hi-Z** (high impedance, intended for frequencies below 60 MHz) or **Tuner 2 50 Ω**. Can be changed while receiving. |
 | **Bias-T** | DC supply on the Tuner 2 port. Available only with Tuner 2 selected. Off by default. |
 | **MW/FM Notch** | Broadcast MW/FM band-stop filter. |
@@ -109,7 +109,7 @@ Three icon buttons at the bottom of the plugin window show and hide three window
 | Null Depth Limit | The deepest null the current coherence allows, 10·log10(1 − c²) (Diversity only). |
 | Saturated Samples | Samples of the sum that clipped, per 100 ms (Diversity only). |
 | Unpaired Packets | Packets of one tuner that arrived without the packet of the other (Diversity only). |
-| ADC overload | Warning when the ADC is overloaded. Raise the LNA state or the IF gain reduction. |
+| ADC overload | Warning when the ADC is overloaded. Raise the LNA state or the IF gain reduction. While it lasts, a red **OVL** badge (in Diversity **OVL T1** / **OVL T2**) also shows in the top right corner of the SDR# spectrum. |
 | Measured rate | Actual sample rate delivered by the receiver. |
 | Overruns | Count of sample blocks dropped because the client was too slow. |
 | Device status | State of the device; API errors are shown here in full. |
@@ -145,8 +145,10 @@ the two antennas receive differently from the wanted signal.
 
 In Diversity the plugin window changes:
 
-- The sample rate is fixed at 2 MS/s per tuner and only the 50 Ω ports are used; **Sample Rate** and
-  **Antenna** are disabled.
+- The sample rate is fixed at 2 MS/s per tuner; **Sample Rate** is disabled. Tuner 2 uses its 50 Ω port;
+  **Antenna** chooses the port of Tuner 1: **Tuner 1 50 Ω + Tuner 2 50 Ω** or **Tuner 1 Hi-Z + Tuner 2 50 Ω**
+  (for example a long wire on Hi-Z for listening and a local noise antenna on Tuner 2). It can be changed
+  while receiving. The Hi-Z port is intended for 1 kHz – 30 MHz (RSPduo datasheet).
 - The AGC is off. **LNA State** and **IF Gain Reduction** exist for each tuner (Tuner 1, Tuner 2); the button
   **Tuner 2 gain = Tuner 1 gain** copies the settings of Tuner 1 to Tuner 2.
 - Bias-T acts on Tuner 2 and the AM notch on Tuner 1, as in Single Tuner mode.
@@ -209,6 +211,11 @@ antennas receive it differently from the marked signal.
 
 - **Overload.** If the ADC overload indicator shows, increase the LNA state (more attenuation) before anything
   else; strong broadcast stations are the usual cause. The notch filters help near the MW/FM or DAB bands.
+- **Narrow band next to strong stations.** To watch up to about 200–300 kHz, for example an amateur band
+  segment next to broadcast stations, use **0.5 MS/s Low IF** with the 200 or 300 kHz filter. The IF filter
+  attenuates the stations outside it before the ADC, so the gain can stay higher without overload; the SDR#
+  decimation narrows only the view and does not protect the ADC. Measured on the FM band: with the 1.536 MHz
+  filter the ADC overloaded at an LNA reduction of 18 dB, with the 300 kHz filter not even at LNA state 0.
 - **Low frequencies.** Use **Tuner 1 Hi-Z** below 60 MHz for long-wire and loop antennas; use the 50 Ω ports
   for ordinary antennas.
 - **Switching antennas.** The change is applied immediately; gain settings are re-sent automatically.
@@ -241,7 +248,8 @@ antennas receive it differently from the marked signal.
 - After a reconnection SDR# resets the VFO to the centre frequency (SDR# sends the bridge only its centre
   frequency).
 - A new sample rate or a new mode applies at the next connection of the source.
-- Diversity: 2 MS/s only, 50 Ω ports only (no Hi-Z), AGC off; Sample Rate and Antenna are fixed.
+- Diversity: 2 MS/s only, Tuner 2 on its 50 Ω port, AGC off; Sample Rate is fixed.
+  Tuner 1 on its 50 Ω or Hi-Z port.
 - Diversity: the phase between the tuners is random after every retune; repeat Null / Max or use
   **Auto after retune**.
 - Diversity: one weight for the whole stream; two antennas cancel one interference source at a time. A measured

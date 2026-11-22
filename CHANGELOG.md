@@ -5,9 +5,24 @@
 All notable changes of the plugin. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the versions follow [Semantic Versioning](https://semver.org/).
 
+- [1.3.0 - 2026-11-22](#130---2026-11-22)
 - [1.2.0 - 2026-11-21](#120---2026-11-21)
 - [1.1.0 - 2026-11-20](#110---2026-11-20)
 - [1.0.0 - 2026-11-20](#100---2026-11-20)
+
+## 1.3.0 - 2026-11-22
+
+Overload indicator on the spectrum, Tuner 1 Hi-Z in Diversity and Low IF with narrow IF filters.
+
+### Added
+
+- A red **OVL** badge on the SDR# spectrum while the ADC is overloaded (in Diversity **OVL T1** / **OVL T2**).
+- Diversity: Tuner 1 on its Hi-Z port (**Antenna**: **Tuner 1 Hi-Z + Tuner 2 50 Ω**).
+- **Sample Rate**: Low IF at 0.5 MS/s with a 200 or 300 kHz IF filter, and at 2 MS/s with a 1.536 MHz IF filter.
+
+### Changed
+
+- Diversity: **Antenna** is no longer disabled; it chooses the port of Tuner 1 (Tuner 2 stays on 50 Ω).
 
 ## 1.2.0 - 2026-11-21
 

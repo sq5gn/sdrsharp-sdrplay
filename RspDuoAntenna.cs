@@ -12,6 +12,9 @@ namespace SDRSharp.SDRplay
 
         public const int Default = Tuner1_50Ohm;
 
+        // Diversity (Dual Tuner mode): the port of tuner 1; tuner 2 always uses its 50 ohm port.
+        public static readonly string[] DiversityNames = new string[] { "Tuner 1 50 Ω + Tuner 2 50 Ω", "Tuner 1 Hi-Z + Tuner 2 50 Ω" };
+
         public static int Clamp(int antenna)
         {
             if (antenna < Tuner1_50Ohm || antenna > Tuner2_50Ohm)

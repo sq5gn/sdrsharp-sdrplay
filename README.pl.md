@@ -20,10 +20,11 @@ oficjalne SDRplay API i przekazuje próbki do wbudowanego źródła SDR# **AIRSP
 
 ## Funkcje
 
-- Szybkości próbkowania 2, 6, 8 i 10 MS/s z odpowiednimi filtrami IF; węższe pasma przez decymację w SDR#.
+- Szybkości próbkowania 2, 6, 8 i 10 MS/s z odpowiednimi filtrami IF oraz Low IF: 0,5 MS/s (filtr IF 200 lub 300 kHz, przeciw przesterowaniu od pobliskich silnych stacji) albo 2 MS/s.
 - Pełne sterowanie wzmocnieniem RSPduo z okna wtyczki: stan LNA (wartości dB z tabel SDRplay dla danego
   pasma i portu), AGC (Off / Fast / Medium / Slow), punkt pracy AGC i ręczne tłumienie IF.
 - Wybór anteny w trakcie odbioru: Tuner 1 50 Ω, Tuner 1 Hi-Z, Tuner 2 50 Ω.
+- Wskaźnik przesterowania ADC: czerwony znacznik **OVL** na widmie SDR#.
 - **Diversity** (tryb Dual Tuner RSPduo): oba tunery odbierają jednocześnie, po 2 MS/s, a SDR# dostaje jeden
   strumień: Tuner 1, Tuner 2 albo sumę Tuner 1 + w · Tuner 2. Wagę w ustawia się kołem fazowym i suwakiem
   wzmocnienia albo automatycznie: **Null** wygasza najsilniejsze zakłócenie albo sygnał zaznaczony filtrem
@@ -80,7 +81,7 @@ Pełną instrukcję znajdziesz [tutaj](docs/INSTRUKCJA.md). Zmiany między wersj
   tylko częstotliwość środkową, przesunięcie VFO zostaje wewnątrz SDR#.
 - Nowa szybkość próbkowania albo nowy tryb (Single Tuner / Diversity) działa od następnego połączenia źródła
   SDR# (Stop, potem Play).
-- Diversity pracuje przy 2 MS/s i tylko na portach 50 Ω; szybkość próbkowania i antena są w nim stałe, a AGC
+- Diversity pracuje przy 2 MS/s z Tunerem 2 na porcie 50 Ω (Tuner 1 na 50 Ω albo Hi-Z); szybkość próbkowania jest w nim stała, a AGC
   wyłączone.
 - Faza między tunerami jest losowa po każdym przestrojeniu: powtórz Null / Max (albo zaznacz **Auto after retune**).
 - Dwie anteny wygaszają jedno źródło zakłóceń naraz; głębokość ogranicza jego koherencja między antenami.

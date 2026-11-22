@@ -47,6 +47,7 @@ namespace SDRSharp.SDRplay
         private volatile int _reportedLnaGainReduction = -1; // dB
         private double _reportedGain; // dB, system gain from the GainChange event
         private volatile int _antenna = RspDuoAntenna.Default;
+        private volatile bool _diversityHiZ; // Diversity: tuner 1 on its Hi-Z port
         private volatile bool _biasT;
         private volatile bool _rfNotch;
         private volatile bool _dabNotch;
@@ -135,6 +136,11 @@ namespace SDRSharp.SDRplay
         {
             _activeRateIndex = _sampleRateIndex;
             _activeMode = _mode;
+            // The mode decides the tuner 1 port (antenna or DiversityHiZ), and with it the number of LNA states.
+            lock (_apiLock)
+            {
+                _lnaState = Math.Min(_lnaState, LnaStateCount - 1);
+            }
         }
 
         public uint DecimationStageCount => MaxDecimationStage;
@@ -346,6 +352,44 @@ namespace SDRSharp.SDRplay
                     channel->RspDuoTunerParams.Tuner1AmPortSel = RspDuoAntenna.AmPort(antenna);
                     SetGain(channel, _device.Tuner);
                     Check("Update AmPortSelect", sdrplay_api_Update(_device.Dev, _device.Tuner, reason | SDRplayApi.UpdateRspDuoAmPortSelect, SDRplayApi.UpdateExt1None));
+                }
+            }
+        }
+
+        // Diversity: tuner 1 on the Hi-Z port instead of its 50 ohm port; tuner 2 stays on its 50 ohm port.
+        // RSPduo datasheet (operating modes): tuner 1 has 50 ohm / Hi-Z in dual tuner mode; verified on the device.
+        public bool DiversityHiZ
+        {
+            get { return _diversityHiZ; }
+            set
+            {
+                lock (_apiLock)
+                {
+                    if (_diversityHiZ == value)
+                    {
+                        return;
+                    }
+                    _diversityHiZ = value;
+                    var reason = SDRplayApi.UpdateRspDuoAmPortSelect;
+                    if (_lnaState > LnaStateCount - 1)
+                    {
+                        _lnaState = LnaStateCount - 1;
+                        reason |= SDRplayApi.UpdateTunerGr;
+                    }
+                    if (!_streaming || !Diversity)
+                    {
+                        return;
+                    }
+                    var channel = (SDRplayRxChannelParams*)_channel;
+                    SetTunerOptions(channel, SDRplayApi.TunerA);
+                    SetGain(channel, SDRplayApi.TunerA);
+                    var updated = Check("Update AmPortSelect A", sdrplay_api_Update(_device.Dev, SDRplayApi.TunerA, reason, SDRplayApi.UpdateExt1None));
+                    UpdateDeviceName();
+                    // The other port gives tuner A another gain and phase: the weight no longer fits, as after a retune.
+                    if (updated && _autoAfterRetune)
+                    {
+                        _combiner.RepeatAuto();
+                    }
                 }
             }
         }
@@ -673,8 +717,8 @@ namespace SDRSharp.SDRplay
             }
             else
             {
-                deviceParams->DevParams->FsFreq.FsHz = RspDuoSampleRates.SampleRate[_activeRateIndex];
-                SetupChannel(channel, _device.Tuner, RspDuoSampleRates.BwType[_activeRateIndex], SDRplayApi.IFZero);
+                deviceParams->DevParams->FsFreq.FsHz = RspDuoSampleRates.AdcRate[_activeRateIndex];
+                SetupChannel(channel, _device.Tuner, RspDuoSampleRates.BwType[_activeRateIndex], RspDuoSampleRates.IfType[_activeRateIndex]);
             }
             _channel = (IntPtr)channel;
             _channelB = (IntPtr)channelB;
@@ -807,12 +851,13 @@ namespace SDRSharp.SDRplay
             }
         }
 
-        // The Hi-Z port exists only in Single Tuner mode (Diversity uses the 50 ohm ports). While streaming
+        // Tuner 1 on the Hi-Z port: the antenna in Single Tuner mode, DiversityHiZ in Diversity. While streaming
         // the session's mode counts, otherwise the mode chosen for the next session.
         private bool IsHiZ(int antenna, long frequency)
         {
             var diversity = _streaming ? Diversity : _mode == RspDuoModes.Diversity;
-            return !diversity && antenna == RspDuoAntenna.Tuner1HiZ && frequency < RspDuoGainTable.HiZMaxFrequency;
+            var hiZ = diversity ? _diversityHiZ : antenna == RspDuoAntenna.Tuner1HiZ;
+            return hiZ && frequency < RspDuoGainTable.HiZMaxFrequency;
         }
 
         // The channel parameters of the selected tuner (single tuner mode: rxChannelB for tuner B).
@@ -832,7 +877,7 @@ namespace SDRSharp.SDRplay
                 return;
             }
             _deviceName = "RSPduo " + _serial + ", " + (Diversity
-                ? "Diversity, output " + RspDuoModes.OutputNames[RspDuoModes.OutputIndex(_output)]
+                ? "Diversity" + (_diversityHiZ ? " (Tuner 1 Hi-Z)" : "") + ", output " + RspDuoModes.OutputNames[RspDuoModes.OutputIndex(_output)]
                 : RspDuoAntenna.Names[_antenna]);
         }
 
@@ -840,10 +885,11 @@ namespace SDRSharp.SDRplay
         {
             if (Diversity)
             {
-                // Both 50 ohm ports: the Bias-T belongs to tuner B, the AM notch to tuner A.
+                // Tuner B on its 50 ohm port, tuner A on the 50 ohm or the Hi-Z port: the Bias-T belongs to
+                // tuner B, the AM notch to tuner A.
                 var b = tuner == SDRplayApi.TunerB;
                 channel->RspDuoTunerParams.BiasTEnable = (byte)(_biasT && b ? 1 : 0);
-                channel->RspDuoTunerParams.Tuner1AmPortSel = SDRplayApi.RspDuoAmPort2;
+                channel->RspDuoTunerParams.Tuner1AmPortSel = _diversityHiZ && !b ? SDRplayApi.RspDuoAmPort1 : SDRplayApi.RspDuoAmPort2;
                 channel->RspDuoTunerParams.Tuner1AmNotchEnable = (byte)(_amNotch && !b ? 1 : 0);
             }
             else
@@ -956,7 +1002,7 @@ namespace SDRSharp.SDRplay
         {
             channel->CtrlParams.Agc.Enable = Diversity ? SDRplayApi.AgcDisable : _agcMode;
             // The API accepts a narrower setpoint range at the higher sample rates.
-            channel->CtrlParams.Agc.SetPointDBfs = Math.Max(_agcSetPoint, RspDuoSampleRates.MinAgcSetPoint(ActiveSampleRate));
+            channel->CtrlParams.Agc.SetPointDBfs = Math.Max(_agcSetPoint, RspDuoSampleRates.MinAgcSetPoint(Diversity ? ActiveSampleRate : RspDuoSampleRates.AdcRate[_activeRateIndex]));
         }
 
         private void SetDecimation(SDRplayRxChannelParams* channel)

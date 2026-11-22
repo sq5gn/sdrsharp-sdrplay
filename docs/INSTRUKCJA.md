@@ -76,7 +76,7 @@ Uwagi:
 | **AGC** | **Off**, **Fast**, **Medium** lub **Slow**: szerokość pętli AGC 100, 50 lub 5 Hz (więcej oznacza szybciej). Domyślnie **Medium**. |
 | **AGC Setpoint (dBFS)** | Docelowy poziom sygnału dla AGC. |
 | **IF Gain Reduction** | Ręczne tłumienie IF, 20–59 dB. Działa przy AGC **Off**. |
-| **Sample Rate** | 2, 6, 8 lub 10 MS/s, każda z odpowiednim filtrem IF. |
+| **Sample Rate** | Zero IF: 2, 6, 8 lub 10 MS/s, każda z odpowiednim filtrem IF. Low IF: **0.5 MS/s Low IF** z filtrem IF 200 lub 300 kHz albo **2 MS/s Low IF** z filtrem IF 1,536 MHz. |
 | **Antenna** | **Tuner 1 50 Ω**, **Tuner 1 Hi-Z** (wysoka impedancja, przeznaczona dla częstotliwości poniżej 60 MHz) lub **Tuner 2 50 Ω**. Można zmieniać w trakcie odbioru. |
 | **Bias-T** | Zasilanie DC na porcie Tunera 2. Dostępne tylko po wybraniu Tunera 2. Domyślnie wyłączone. |
 | **MW/FM Notch** | Filtr zaporowy pasm radiofonicznych MW/FM. |
@@ -109,7 +109,7 @@ Trzy przyciski z ikonami na dole okna wtyczki pokazują i ukrywają trzy okna do
 | Null Depth Limit | Najgłębsze zerowanie, na jakie pozwala bieżąca koherencja, 10·log10(1 − c²) (tylko w Diversity). |
 | Saturated Samples | Próbki sumy obcięte (przesterowane), na 100 ms (tylko w Diversity). |
 | Unpaired Packets | Pakiety jednego tunera, które dotarły bez pakietu drugiego (tylko w Diversity). |
-| ADC overload | Ostrzeżenie o przesterowaniu przetwornika ADC. Zwiększ stan LNA lub tłumienie IF. |
+| ADC overload | Ostrzeżenie o przesterowaniu przetwornika ADC. Zwiększ stan LNA lub tłumienie IF. Dopóki trwa, w prawym górnym rogu widma SDR# widać też czerwony znacznik **OVL** (w Diversity **OVL T1** / **OVL T2**). |
 | Measured rate | Rzeczywista szybkość próbkowania dostarczana przez odbiornik. |
 | Overruns | Liczba pominiętych bloków próbek, gdy klient nie nadążał. |
 | Device status | Stan urządzenia; pełne komunikaty błędów API pojawiają się tutaj. |
@@ -145,8 +145,10 @@ odbierają inaczej niż sygnał pożądany.
 
 W Diversity okno wtyczki się zmienia:
 
-- Szybkość próbkowania jest stała, 2 MS/s na tuner, i używane są tylko porty 50 Ω; **Sample Rate** oraz
-  **Antenna** są nieaktywne.
+- Szybkość próbkowania jest stała, 2 MS/s na tuner; **Sample Rate** jest nieaktywne. Tuner 2 używa portu
+  50 Ω; **Antenna** wybiera port Tunera 1: **Tuner 1 50 Ω + Tuner 2 50 Ω** albo **Tuner 1 Hi-Z + Tuner 2 50 Ω**
+  (np. antena drutowa na Hi-Z do nasłuchu i antena na lokalne zakłócenia na Tunerze 2). Można zmieniać w trakcie
+  odbioru. Port Hi-Z jest przeznaczony dla 1 kHz – 30 MHz (nota katalogowa RSPduo).
 - AGC jest wyłączone. **LNA State** i **IF Gain Reduction** są osobno dla każdego tunera (Tuner 1, Tuner 2);
   przycisk **Tuner 2 gain = Tuner 1 gain** kopiuje ustawienia Tunera 1 do Tunera 2.
 - Bias-T działa na Tunerze 2, a filtr AM Notch na Tunerze 1, tak jak w trybie Single Tuner.
@@ -209,6 +211,11 @@ odbierają ją inaczej niż zaznaczony sygnał.
 
 - **Przesterowanie.** Gdy pojawi się wskaźnik przesterowania ADC, najpierw zwiększ stan LNA (większe
   tłumienie); zwykle winne są silne stacje radiofoniczne. Przy pasmach MW/FM i DAB pomagają filtry notch.
+- **Wąskie pasmo obok silnych stacji.** Do obserwacji do około 200–300 kHz, np. odcinka pasma amatorskiego
+  obok stacji radiofonicznych, używaj **0.5 MS/s Low IF** z filtrem 200 lub 300 kHz. Filtr IF tłumi stacje
+  spoza niego przed ADC, więc wzmocnienie może zostać wyższe bez przesterowania; decymacja w SDR# zawęża tylko
+  widok i nie chroni ADC. Zmierzone w paśmie FM: z filtrem 1,536 MHz ADC przesterowywał się przy tłumieniu LNA
+  18 dB, z filtrem 300 kHz nawet przy stanie LNA 0.
 - **Niskie częstotliwości.** Poniżej 60 MHz używaj **Tuner 1 Hi-Z** dla anten długoprzewodowych i pętlowych;
   dla zwykłych anten używaj portów 50 Ω.
 - **Przełączanie anten.** Zmiana działa natychmiast; ustawienia wzmocnienia są wysyłane ponownie automatycznie.
@@ -241,7 +248,8 @@ odbierają ją inaczej niż zaznaczony sygnał.
 - Po ponownym połączeniu SDR# ustawia VFO na częstotliwość środkową (SDR# wysyła do mostu tylko
   częstotliwość środkową).
 - Nowa szybkość próbkowania albo nowy tryb działa od następnego połączenia źródła.
-- Diversity: tylko 2 MS/s, tylko porty 50 Ω (bez Hi-Z), AGC wyłączone; Sample Rate i Antenna są stałe.
+- Diversity: tylko 2 MS/s, Tuner 2 na porcie 50 Ω, AGC wyłączone; Sample Rate jest stałe.
+  Tuner 1 na porcie 50 Ω albo Hi-Z.
 - Diversity: faza między tunerami jest losowa po każdym przestrojeniu; powtórz Null / Max albo użyj
   **Auto after retune**.
 - Diversity: jedna waga dla całego strumienia; dwie anteny wygaszają jedno źródło zakłóceń naraz. Mierzone

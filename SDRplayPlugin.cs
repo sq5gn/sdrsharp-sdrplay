@@ -20,6 +20,7 @@ namespace SDRSharp.SDRplay
         private ClientPanel _clientPanel;
         private DiversityPanel _diversityPanel;
         private bool _cursorOverReference; // paint handler only: the hover title is ours to clear
+        private Font _overloadFont; // paint handler only: created on the first OVL, disposed in Close
 
         private static readonly Color ReferenceColor = Color.FromArgb(30, 180, 170);
 
@@ -51,6 +52,7 @@ namespace SDRSharp.SDRplay
             _source.AgcSetPoint = Utils.GetIntSetting("plugin.sdrplay.agcSetPoint", -60);
             _source.IFGainReduction = Utils.GetIntSetting("plugin.sdrplay.ifGainReduction", 50);
             _source.Antenna = Utils.GetIntSetting("plugin.sdrplay.antenna", RspDuoAntenna.Default);
+            _source.DiversityHiZ = Utils.GetBooleanSetting("plugin.sdrplay.diversityHiZ", false);
             _source.BiasT = Utils.GetBooleanSetting("plugin.sdrplay.biasT", false);
             _source.RfNotch = Utils.GetBooleanSetting("plugin.sdrplay.rfNotch", false);
             _source.DabNotch = Utils.GetBooleanSetting("plugin.sdrplay.dabNotch", false);
@@ -81,13 +83,11 @@ namespace SDRSharp.SDRplay
             _control.SpectrumAnalyzerCustomPaint += spectrumAnalyzer_CustomPaint;
         }
 
-        // The reference band on the SDR# spectrum, in Diversity mode (VDK 05-ui.md 5.5).
+        // On the SDR# spectrum: the reference band in Diversity mode and the ADC overload indicator (VDK 05-ui.md 5.5).
         private void spectrumAnalyzer_CustomPaint(object sender, CustomPaintEventArgs e)
         {
-            long low;
-            long high;
-            // Only while the plugin streams Diversity: SDR# may play another source with the plugin off.
-            if (!_bridge.Enabled || !_source.IsStreaming || _source.ActiveMode != RspDuoModes.Diversity || !_source.Combiner.GetReference(out low, out high))
+            // Only while the plugin streams: SDR# may play another source with the plugin off.
+            if (!_bridge.Enabled || !_source.IsStreaming)
             {
                 ClearReferenceTitle(e);
                 return;
@@ -96,10 +96,50 @@ namespace SDRSharp.SDRplay
             Utils.ConfigureGraphics(e.Graphics, false);
 
             var spectrum = (SpectrumAnalyzer)sender;
+            var diversity = _source.ActiveMode == RspDuoModes.Diversity;
+            PaintReference(spectrum, e, diversity);
+            PaintOverload(spectrum, e, diversity);
+        }
+
+        // Red "OVL" badge in the top right corner of the spectrum while the API reports an ADC overload;
+        // in Diversity it names the tuner (T1, T2 or both).
+        private void PaintOverload(SpectrumAnalyzer spectrum, CustomPaintEventArgs e, bool diversity)
+        {
+            var a = _source.Overload;
+            var b = diversity && _source.OverloadB;
+            if (!a && !b)
+            {
+                return;
+            }
+            var text = !diversity ? "OVL" : a && b ? "OVL T1 T2" : a ? "OVL T1" : "OVL T2";
+            if (_overloadFont == null)
+            {
+                _overloadFont = new Font(spectrum.Font.FontFamily, 9f, FontStyle.Bold);
+            }
+            var size = e.Graphics.MeasureString(text, _overloadFont);
+            var width = (int)Math.Ceiling(size.Width) + 8;
+            var height = (int)Math.Ceiling(size.Height) + 4;
+            var x = spectrum.Width - Waterfall.AxisMargin - width - 4;
+            var y = Waterfall.AxisMargin + 4;
+            e.Graphics.FillRectangle(Brushes.Red, x, y, width, height);
+            e.Graphics.DrawString(text, _overloadFont, Brushes.White, x + 4, y + 2);
+        }
+
+        private void PaintReference(SpectrumAnalyzer spectrum, CustomPaintEventArgs e, bool diversity)
+        {
+            long low;
+            long high;
+            if (!diversity || !_source.Combiner.GetReference(out low, out high))
+            {
+                ClearReferenceTitle(e);
+                return;
+            }
+
             var x1 = (int)Math.Max(Waterfall.AxisMargin, spectrum.FrequencyToPoint(low));
             var x2 = (int)Math.Min(spectrum.Width - Waterfall.AxisMargin, spectrum.FrequencyToPoint(high));
             if (x2 <= x1)
             {
+                ClearReferenceTitle(e);
                 return;
             }
             var top = Waterfall.AxisMargin;
@@ -194,6 +234,7 @@ namespace SDRSharp.SDRplay
             Utils.SaveSetting("plugin.sdrplay.agcSetPoint", _source.AgcSetPoint);
             Utils.SaveSetting("plugin.sdrplay.ifGainReduction", _source.IFGainReduction);
             Utils.SaveSetting("plugin.sdrplay.antenna", _source.Antenna);
+            Utils.SaveSetting("plugin.sdrplay.diversityHiZ", _source.DiversityHiZ);
             Utils.SaveSetting("plugin.sdrplay.biasT", _source.BiasT);
             Utils.SaveSetting("plugin.sdrplay.rfNotch", _source.RfNotch);
             Utils.SaveSetting("plugin.sdrplay.dabNotch", _source.DabNotch);
@@ -221,6 +262,12 @@ namespace SDRSharp.SDRplay
             }
             _bridge.Dispose();
             _source.Dispose();
+            _control.SpectrumAnalyzerCustomPaint -= spectrumAnalyzer_CustomPaint;
+            if (_overloadFont != null)
+            {
+                _overloadFont.Dispose();
+                _overloadFont = null;
+            }
         }
 
         public void LoadGui()

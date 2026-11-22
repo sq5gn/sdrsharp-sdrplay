@@ -24,6 +24,8 @@ namespace SDRSharp.SDRplay
         private Bitmap _diversityIcon;
         private Bitmap _diversityDarkIcon;
         private int _bridgeCalls; // bridge start / stop calls still running on a worker thread
+        private bool _antennaListDiversity; // antennaComboBox holds RspDuoAntenna.DiversityNames
+        private bool _fillingAntenna; // antennaComboBox is being refilled: not a choice of the user
 
         public SettingsPanel(SpyServerBridge bridge, SDRplaySource source, ISharpControl control, ReceiverPanel receiverPanel, ClientPanel clientPanel, DiversityPanel diversityPanel)
         {
@@ -55,8 +57,7 @@ namespace SDRSharp.SDRplay
             ifGainTrackBar.Value = Math.Min(Math.Max(_source.IFGainReduction, ifGainTrackBar.Minimum), ifGainTrackBar.Maximum);
             rateComboBox.Items.AddRange(RspDuoSampleRates.Names);
             rateComboBox.SelectedIndex = _source.SampleRateIndex;
-            antennaComboBox.Items.AddRange(RspDuoAntenna.Names);
-            antennaComboBox.SelectedIndex = _source.Antenna;
+            FillAntennaComboBox();
             biasTCheckBox.Checked = _source.BiasT;
             rfNotchCheckBox.Checked = _source.RfNotch;
             dabNotchCheckBox.Checked = _source.DabNotch;
@@ -120,8 +121,8 @@ namespace SDRSharp.SDRplay
             ifGainBTrackBar.Value = ifGainTrackBar.Value;
         }
 
-        // Which controls apply in the mode chosen for the next session. Diversity: AGC off, 2 MS/s, both 50 ohm
-        // ports (no antenna choice), gain per tuner, Bias-T on tuner 2 and AM notch on tuner 1 always available.
+        // Which controls apply in the mode chosen for the next session. Diversity: AGC off, 2 MS/s, tuner 2 on
+        // 50 ohm and tuner 1 on 50 ohm or Hi-Z, gain per tuner, Bias-T on tuner 2 and AM notch on tuner 1 always available.
         private void UpdateModeControls()
         {
             var diversity = _source.Mode == RspDuoModes.Diversity;
@@ -139,7 +140,7 @@ namespace SDRSharp.SDRplay
             setPointNumericUpDown.Enabled = !diversity && !manual;
             ifGainTrackBar.Enabled = diversity || manual;
             rateComboBox.Enabled = !diversity;
-            antennaComboBox.Enabled = !diversity;
+            FillAntennaComboBox();
             // The AM notch belongs to tuner 1, the Bias-T to the tuner 2 port.
             amNotchCheckBox.Enabled = diversity || _source.Antenna != RspDuoAntenna.Tuner2_50Ohm;
             biasTCheckBox.Enabled = diversity || _source.Antenna == RspDuoAntenna.Tuner2_50Ohm;
@@ -228,9 +229,37 @@ namespace SDRSharp.SDRplay
             _source.SampleRateIndex = rateComboBox.SelectedIndex;
         }
 
+        // Single Tuner mode: the three antenna inputs; Diversity: the port of tuner 1 (tuner 2 is on 50 ohm).
+        private void FillAntennaComboBox()
+        {
+            var diversity = _source.Mode == RspDuoModes.Diversity;
+            if (_antennaListDiversity == diversity && antennaComboBox.Items.Count > 0)
+            {
+                return;
+            }
+            _fillingAntenna = true;
+            antennaComboBox.Items.Clear();
+            antennaComboBox.Items.AddRange(diversity ? RspDuoAntenna.DiversityNames : RspDuoAntenna.Names);
+            antennaComboBox.SelectedIndex = diversity ? (_source.DiversityHiZ ? 1 : 0) : _source.Antenna;
+            _antennaListDiversity = diversity;
+            _fillingAntenna = false;
+        }
+
         private void antennaComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (_source.Antenna != antennaComboBox.SelectedIndex)
+            if (_fillingAntenna)
+            {
+                return;
+            }
+            if (_antennaListDiversity)
+            {
+                var hiZ = antennaComboBox.SelectedIndex == 1;
+                if (_source.DiversityHiZ != hiZ)
+                {
+                    _source.DiversityHiZ = hiZ;
+                }
+            }
+            else if (_source.Antenna != antennaComboBox.SelectedIndex)
             {
                 _source.Antenna = antennaComboBox.SelectedIndex;
             }

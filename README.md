@@ -20,10 +20,11 @@ official SDRplay API, and feeds the samples to SDR#'s built-in **AIRSPY Server N
 
 ## Features
 
-- Sample rates of 2, 6, 8 and 10 MS/s with the matching IF filters; narrower bandwidths via SDR# decimation.
+- Sample rates of 2, 6, 8 and 10 MS/s with the matching IF filters, and Low IF at 0.5 MS/s (200 or 300 kHz IF filter, against overload from strong stations nearby) or 2 MS/s.
 - Full RSPduo gain control from the plugin window: LNA state (dB values from the SDRplay tables per band
   and port), AGC (Off / Fast / Medium / Slow), AGC set-point and manual IF gain reduction.
 - Antenna selection while receiving: Tuner 1 50 Ω, Tuner 1 Hi-Z, Tuner 2 50 Ω.
+- ADC overload indicator: a red **OVL** badge on the SDR# spectrum.
 - **Diversity** (RSPduo Dual Tuner mode): both tuners receive at once, 2 MS/s each, and SDR# gets one stream:
   Tuner 1, Tuner 2 or the sum Tuner 1 + w · Tuner 2. The weight w is set on a phase wheel and a gain slider, or
   found automatically: **Null** cancels the strongest interference or a signal marked with the SDR# filter
@@ -80,7 +81,7 @@ You can find the full instructions [here](docs/USER-GUIDE.md). The changes betwe
   frequency, so the VFO offset stays inside SDR#.
 - A new sample rate or a new mode (Single Tuner / Diversity) applies at the next connection of the SDR# source
   (Stop, then Play).
-- Diversity runs at 2 MS/s on the 50 Ω ports only; the sample rate and antenna are fixed and the AGC is off
+- Diversity runs at 2 MS/s with Tuner 2 on its 50 Ω port (Tuner 1 on 50 Ω or Hi-Z); the sample rate is fixed and the AGC is off
   in this mode.
 - The phase between the tuners is random after every retune: repeat Null / Max (or tick **Auto after retune**).
 - Two antennas cancel one interference source at a time; the depth is limited by its coherence between them.

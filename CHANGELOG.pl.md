@@ -5,9 +5,24 @@
 Najważniejsze zmiany we wtyczce. Format wg [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 wersje wg [Semantic Versioning](https://semver.org/lang/pl/).
 
+- [1.3.0 - 2026-11-22](#130---2026-11-22)
 - [1.2.0 - 2026-11-21](#120---2026-11-21)
 - [1.1.0 - 2026-11-20](#110---2026-11-20)
 - [1.0.0 - 2026-11-20](#100---2026-11-20)
+
+## 1.3.0 - 2026-11-22
+
+Wskaźnik przesterowania na widmie, Hi-Z Tunera 1 w Diversity i Low IF z wąskimi filtrami IF.
+
+### Dodano
+
+- Czerwony znacznik **OVL** na widmie SDR#, gdy ADC jest przesterowany (w Diversity **OVL T1** / **OVL T2**).
+- Diversity: Tuner 1 na porcie Hi-Z (**Antenna**: **Tuner 1 Hi-Z + Tuner 2 50 Ω**).
+- **Sample Rate**: Low IF 0,5 MS/s z filtrem IF 200 lub 300 kHz oraz 2 MS/s z filtrem IF 1,536 MHz.
+
+### Zmieniono
+
+- Diversity: pole **Antenna** nie jest już nieaktywne; wybiera port Tunera 1 (Tuner 2 zostaje na 50 Ω).
 
 ## 1.2.0 - 2026-11-21
 
